@@ -67,12 +67,24 @@ object Collector {
     }
 
     /**
+     * OEM app-cloning spaces live at fixed user ids and are not work profiles, even though some
+     * (MIUI Second Space / Dual Apps) are built as managed profiles and carry the "Work" badge:
+     * 999 = MIUI/HyperOS + ColorOS Dual Apps, 128 = Huawei App Twin, 95 = Samsung Dual Messenger,
+     * 150 = Samsung Secure Folder. Real work profiles get the next free id from 10 upwards.
+     */
+    private val CLONE_USER_IDS = setOf(95, 128, 150, 999)
+
+    /** UserHandle.hashCode() is the user id (public API exposes no getter). */
+    private fun userId(u: android.os.UserHandle): Int = u.hashCode()
+
+    /**
      * Counts extra profiles that are WORK profiles: Android badges app labels in them as "Work …".
-     * Dual Apps / Second Space carry no such badge. Returns -1 when it cannot tell.
+     * OEM clone spaces are skipped first. Returns -1 when it cannot tell.
      */
     private fun workProfiles(ctx: Context, um: UserManager): Int {
         val me = android.os.Process.myUserHandle()
-        val others = runCatching { um.userProfiles }.getOrDefault(emptyList()).filter { it != me }
+        val others = runCatching { um.userProfiles }.getOrDefault(emptyList())
+            .filter { it != me && userId(it) !in CLONE_USER_IDS }
         if (others.isEmpty()) return 0
         val res = android.content.res.Resources.getSystem()
         val probe = "MDMCHECK"
