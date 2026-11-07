@@ -29,7 +29,7 @@
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
-        android:label="MDM Check"
+        android:label="Cozy MDM Check"
         android:theme="@style/AppTheme">
         <activity
             android:name=".MainActivity"

@@ -22,7 +22,7 @@ class AppFlowTest {
     private val anyVerdict = hasText("Máy sạch") or hasText("Cần xem thêm") or hasText("Máy đang bị quản lý")
 
     @Test fun homeShowsDeviceAndVersion() {
-        rule.onNodeWithText("MDM Check").assertIsDisplayed()
+        rule.onNodeWithText("Cozy MDM Check").assertIsDisplayed()
         rule.onNodeWithText("Kiểm tra").assertIsDisplayed()
         rule.onNodeWithText("Phiên bản ${BuildConfig.VERSION_NAME}", substring = true).assertIsDisplayed()
     }

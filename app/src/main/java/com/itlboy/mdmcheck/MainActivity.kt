@@ -148,8 +148,8 @@ private fun Header(onBack: (() -> Unit)? = null) {
             }
         }
         Text(
-            "MDM Check", modifier = Modifier.align(Alignment.Center),
-            fontSize = 34.sp, fontWeight = FontWeight.ExtraBold, color = Ink, letterSpacing = (-0.5).sp,
+            "Cozy MDM Check", modifier = Modifier.align(Alignment.Center),
+            fontSize = 30.sp, fontWeight = FontWeight.ExtraBold, color = Ink, letterSpacing = (-0.5).sp,
         )
     }
 }

@@ -1,4 +1,4 @@
-# MDM Check
+# Cozy MDM Check
 
 App Android nhỏ: bấm một nút để biết máy có đang bị **MDM** (quản lý thiết bị của công ty),
 **hồ sơ công việc** hay **khoá trả góp** không. Hữu ích khi mua máy cũ hoặc mua theo lô.
@@ -33,7 +33,7 @@ Kotlin + Jetpack Compose, minSdk 26. Logic kết luận nằm trọn trong `Rule
 ```sh
 gradle testDebugUnitTest          # unit test cho Rules
 gradle connectedDebugAndroidTest  # test trên máy/giả lập đang cắm
-gradle assembleDebug              # APK ở app/build/outputs/apk/debug/
+gradle assembleRelease            # APK ở app/build/outputs/apk/release/
 ```
 
 CI (`.github/workflows/build.yml`): mỗi lần push lên `main` chạy unit test + test trên giả lập Android 14;
