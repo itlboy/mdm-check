@@ -297,17 +297,23 @@ private fun VersionPill(v: VersionState) {
     val uri = LocalUriHandler.current
     val newer = v.latest != null && Rules.isNewer(v.current, v.latest.version)
     val (dot, text) = when {
-        !v.checked -> Faint to "Version ${v.current} · checking"
-        v.latest == null -> Faint to "Version ${v.current} · couldn't check"
-        newer -> Bad.solid to "Version ${v.current} · ${v.latest?.version} available, tap to get it"
-        else -> Good.solid to "Version ${v.current} · Up to date"
+        // Kept short so the pill always fits on one line.
+        !v.checked -> Faint to "v${v.current} · Checking…"
+        v.latest == null -> Faint to "v${v.current} · Offline"
+        newer -> Bad.solid to "v${v.current} · Update to ${v.latest?.version}"
+        else -> Good.solid to "v${v.current} · Up to date"
     }
     val base = Modifier.clip(RoundedCornerShape(50)).background(Color.White)
     val mod = if (newer) base.clickable(role = Role.Button) { uri.openUri(v.latest!!.url) } else base
     Row(mod.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(10.dp).clip(CircleShape).background(dot))
         Spacer(Modifier.size(10.dp))
-        Text(text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = if (newer) Bad.fg else Muted)
+        Text(text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = if (newer) Bad.fg else Muted,
+            maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
+        if (newer) {
+            Spacer(Modifier.size(6.dp))
+            Icon(Ic.chevron, contentDescription = null, tint = Bad.fg, modifier = Modifier.size(16.dp))
+        }
     }
 }
 
