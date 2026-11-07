@@ -4,7 +4,7 @@ A small Android app: tap one button to see whether the phone is under **MDM** (c
 management), has a **work profile**, or carries a **payment lock**. Handy when buying used phones
 or phones in bulk.
 
-**Download the APK:** [latest release](https://github.com/itlboy/mdm-check/releases/latest)
+**Download the APK:** https://mdm-check.cozypi.com (always the latest release)
 
 ## What it checks
 
@@ -48,3 +48,14 @@ and publishes `v1.0`, `v1.1`, … automatically. CI-only or README-only changes 
 Released APKs are signed with one fixed key (secrets `SIGNING_KEYSTORE_B64` + `SIGNING_PASSWORD`,
 PKCS12, alias `mdmcheck`), so new versions install over old ones. If that key is lost, users must
 uninstall the old app before installing one signed with a new key.
+
+## Website
+
+`site/` is the Cloudflare Worker behind https://mdm-check.cozypi.com: a landing page (Vietnamese or
+English from the browser language) whose download button, `/download`, always redirects to the newest
+release APK. It reads GitHub Releases at request time (5-minute edge cache), so publishing a new APK
+needs no redeploy. Deploy only when `site/` changes:
+
+```sh
+cd site && npm install && npx wrangler deploy   # needs a Cloudflare API token in the environment
+```
