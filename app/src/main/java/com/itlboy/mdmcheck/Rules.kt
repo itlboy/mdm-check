@@ -41,6 +41,10 @@ data class Facts(
     val knownApps: List<String>,
     /** UserManager restriction keys in force, e.g. "no_factory_reset". */
     val blocked: List<String>,
+    /** Core provisioning app (Managed Provisioning) removed or disabled: classic "MDM fix". */
+    val removedCore: List<String> = emptyList(),
+    /** Optional management apps removed for this user (not on every ROM, so only a warning). */
+    val removedOther: List<String> = emptyList(),
     val bootState: String,
     val rooted: Boolean,
     val devOptions: Boolean,
@@ -156,7 +160,14 @@ object Rules {
             CheckRow(tx.blockedFeatures, tx.blocked(f.blocked.joinToString { tx.restriction(it) }), Status.BAD)
         else CheckRow(tx.blockedFeatures, tx.allAllowed, Status.OK)
 
-        val rows = listOf(admin, owner, profile, known, blocked)
+        // "MDM fix" services disable or uninstall the provisioning apps; a normal phone never does.
+        val traces = when {
+            f.removedCore.isNotEmpty() -> CheckRow(tx.traces, tx.tracesFound((f.removedCore + f.removedOther).joinToString()), Status.BAD)
+            f.removedOther.isNotEmpty() -> CheckRow(tx.traces, tx.tracesRemoved(f.removedOther.joinToString()), Status.WARN)
+            else -> CheckRow(tx.traces, tx.noTraces, Status.OK)
+        }
+
+        val rows = listOf(admin, owner, profile, known, blocked, traces)
         val bad = rows.count { it.status == Status.BAD }
         val warn = rows.count { it.status == Status.WARN }
         val (status, summary) = when {

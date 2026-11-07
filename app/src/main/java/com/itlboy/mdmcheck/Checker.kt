@@ -26,6 +26,15 @@ object Collector {
         "com.payjoy.access" to "PayJoy",
     )
 
+    /** AOSP core app that enrolls devices into MDM. Every normal phone has it enabled. */
+    private val PROVISIONING_CORE = mapOf("com.android.managedprovisioning" to "Managed Provisioning")
+
+    /** Google management apps preloaded on some ROMs only, so only "uninstalled for this user" counts. */
+    private val PROVISIONING_OTHER = mapOf(
+        "com.google.android.apps.work.clouddpc" to "Android Device Policy",
+        "com.google.android.devicelockcontroller" to "Device Lock Controller",
+    )
+
     private val SU_PATHS = listOf(
         "/system/bin/su", "/system/xbin/su", "/sbin/su", "/system/app/Superuser.apk",
         "/data/adb/magisk", "/data/local/bin/su", "/data/local/xbin/su",
@@ -143,6 +152,8 @@ object Collector {
             workProfiles = workProfiles(ctx, um),
             knownApps = KNOWN.keys.filter { installed(pm, it) }.map { KNOWN.getValue(it) }.distinct(),
             blocked = RESTRICTIONS.filter { runCatching { um.hasUserRestriction(it) }.getOrDefault(false) },
+            removedCore = PROVISIONING_CORE.filter { (pkg, _) -> tampered(pm, pkg, disabledCounts = true) }.values.toList(),
+            removedOther = PROVISIONING_OTHER.filter { (pkg, _) -> tampered(pm, pkg, disabledCounts = false) }.values.toList(),
             bootState = prop("ro.boot.verifiedbootstate"),
             rooted = SU_PATHS.any { runCatching { File(it).exists() }.getOrDefault(false) },
             devOptions = global(Settings.Global.DEVELOPMENT_SETTINGS_ENABLED),
@@ -158,6 +169,24 @@ object Collector {
     private fun isSystem(pm: PackageManager, pkg: String): Boolean = runCatching {
         (pm.getApplicationInfo(pkg, 0).flags and ApplicationInfo.FLAG_SYSTEM) != 0
     }.getOrDefault(false)
+
+    /**
+     * True when a system app that ships on this ROM has been uninstalled for the user
+     * (`pm uninstall --user 0`) or, if [disabledCounts], disabled. That is what "MDM fix" tools do.
+     * An app that is simply not on this ROM is not tampering.
+     */
+    private fun tampered(pm: PackageManager, pkg: String, disabledCounts: Boolean): Boolean {
+        ("DEPRECATION")
+        val flags = PackageManager.MATCH_UNINSTALLED_PACKAGES or PackageManager.MATCH_DISABLED_COMPONENTS
+        val ai = runCatching { pm.getApplicationInfo(pkg, flags) }.getOrNull() ?: return false
+        if (ai.flags and ApplicationInfo.FLAG_SYSTEM == 0) return false
+        if (ai.flags and ApplicationInfo.FLAG_INSTALLED == 0) return true
+        if (!disabledCounts) return false
+        val state = runCatching { pm.getApplicationEnabledSetting(pkg) }.getOrNull()
+        return !ai.enabled ||
+            state == PackageManager.COMPONENT_ENABLED_STATE_DISABLED ||
+            state == PackageManager.COMPONENT_ENABLED_STATE_DISABLED_USER
+    }
 
     private fun installed(pm: PackageManager, pkg: String): Boolean =
         runCatching { pm.getPackageInfo(pkg, 0); true }.getOrDefault(false)

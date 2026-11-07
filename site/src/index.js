@@ -179,7 +179,7 @@ const T = {
     req: "Android 8 trở lên",
     whatTitle: "Kiểm tra những gì",
     features: [
-      ["shield", "Dấu hiệu quản lý", "App quản trị thiết bị, máy của tổ chức, hồ sơ công việc, app MDM / khoá trả góp, tính năng bị chặn."],
+      ["shield", "Dấu hiệu quản lý", "App quản trị thiết bị, máy của tổ chức, hồ sơ công việc, app MDM / khoá trả góp, tính năng bị chặn, dấu vết \"fix MDM\"."],
       ["phone", "Thông tin máy", "Tên thương mại, mã model, phiên bản Android, bản vá bảo mật."],
       ["clock", "Lịch sử máy", "Ngày thiết lập máy: biết máy đã qua tay người khác hay chưa."],
       ["lock", "Bảo mật khác", "Bootloader, root, tuỳ chọn nhà phát triển, gỡ lỗi USB."],
@@ -205,7 +205,7 @@ const T = {
     req: "Android 8+",
     whatTitle: "What it checks",
     features: [
-      ["shield", "Management signs", "Device admin apps, organization-owned device, work profile, MDM / payment-lock apps, blocked features."],
+      ["shield", "Management signs", "Device admin apps, organization-owned device, work profile, MDM / payment-lock apps, blocked features, \"MDM fix\" traces."],
       ["phone", "Device info", "Marketing name, model code, Android version, security patch."],
       ["clock", "Device history", "Setup date: tells whether the phone has been used before."],
       ["lock", "Other security", "Bootloader, root, developer options, USB debugging."],

@@ -30,10 +30,10 @@ class TextsTest {
 
     @Test fun vietnameseReport() {
         val r = Rules.report(clean, Vi)
-        assertEquals("Máy sạch", r.headline)
-        assertEquals("Không phát hiện MDM", r.sub)
+        assertEquals("Không thấy MDM", r.headline)
+        assertEquals("Riêng MDM theo IMEI thì app không kiểm được", r.sub)
         assertEquals(listOf("Dấu hiệu quản lý", "Thông tin máy", "Lịch sử máy", "Bảo mật khác"), r.sections.map { it.title })
-        assertEquals("5/5 mục sạch", r.sections[0].summary)
+        assertEquals("6/6 mục sạch", r.sections[0].summary)
         assertEquals("Thiết lập 2 ngày trước", r.sections[2].summary)
         assertEquals("2 ngày 3 giờ", r.sections[2].rows.last().value)
         assertEquals("Không thấy rủi ro", r.sections[3].summary)
@@ -46,7 +46,7 @@ class TextsTest {
         val r = Rules.report(clean.copy(blocked = listOf("no_factory_reset", "no_usb_file_transfer")), Vi)
         assertEquals("Máy đang bị quản lý", r.headline)
         assertEquals("Bị chặn: khôi phục gốc, chép file qua USB", r.sub)
-        assertEquals("1/5 mục có vấn đề", r.sections[0].summary)
+        assertEquals("1/6 mục có vấn đề", r.sections[0].summary)
     }
 
     @Test fun vietnameseDates() {

@@ -18,7 +18,7 @@ import org.junit.runner.RunWith
 class AppFlowTest {
     @get:Rule val rule = createAndroidComposeRule<MainActivity>()
 
-    private val anyVerdict = hasText("Device is clean") or hasText("Worth a closer look") or hasText("Device is managed")
+    private val anyVerdict = hasText("No MDM found") or hasText("Worth a closer look") or hasText("Device is managed")
 
     @Test fun homeShowsTitleAndVersion() {
         rule.onNodeWithText("Cozy MDM Check").assertIsDisplayed()

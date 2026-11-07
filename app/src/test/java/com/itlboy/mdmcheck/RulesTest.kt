@@ -28,9 +28,9 @@ class RulesTest {
     @Test fun cleanDevice_isClean() {
         val r = Rules.report(clean)
         assertEquals(Status.OK, r.status)
-        assertEquals("Device is clean", r.headline)
-        assertEquals("No MDM detected", r.sub)
-        assertEquals("5/5 clear", r.sections[0].summary)
+        assertEquals("No MDM found", r.headline)
+        assertEquals("IMEI-bound MDM can't be checked by an app", r.sub)
+        assertEquals("6/6 clear", r.sections[0].summary)
         assertEquals(listOf(Kind.MDM, Kind.DEVICE, Kind.HISTORY, Kind.SECURITY), r.sections.map { it.kind })
     }
 
@@ -80,7 +80,7 @@ class RulesTest {
         assertEquals(Status.WARN, r.status)
         assertEquals("Worth a closer look", r.headline)
         assertEquals("1 item to review", r.sub)
-        assertEquals("1/5 to review", r.sections[0].summary)
+        assertEquals("1/6 to review", r.sections[0].summary)
         assertEquals("2 extra profiles of unknown type",
             mdmRow(clean.copy(profiles = 3, workProfiles = -1), "Work profile").detail)
     }
@@ -104,7 +104,45 @@ class RulesTest {
     @Test fun badBeatsWarn_andCountsAll() {
         val r = Rules.report(clean.copy(deviceOwner = "X", blocked = listOf("no_uninstall_apps"), profiles = 3, workProfiles = -1))
         assertEquals(Status.BAD, r.status)
-        assertEquals("2/5 with issues", r.sections[0].summary)
+        assertEquals("2/6 with issues", r.sections[0].summary)
+    }
+
+    // ---- "MDM fix" traces (user report: a "fixed" MDM phone was shown as clean) ----
+
+    @Test fun removedManagedProvisioning_isManaged() {
+        val f = clean.copy(removedCore = listOf("Managed Provisioning"))
+        val r = Rules.report(f)
+        assertEquals(Status.BAD, r.status)
+        assertEquals("Device is managed", r.headline)
+        assertEquals("Removed or disabled: Managed Provisioning. Sign of an \"MDM fix\"", r.sub)
+        assertEquals("1/6 with issues", r.sections[0].summary)
+    }
+
+    @Test fun removedCoreListsOtherTracesToo() {
+        val row = mdmRow(clean.copy(removedCore = listOf("Managed Provisioning"), removedOther = listOf("Android Device Policy")), "MDM removal traces")
+        assertEquals(Status.BAD, row.status)
+        assertEquals("Removed or disabled: Managed Provisioning, Android Device Policy. Sign of an \"MDM fix\"", row.detail)
+    }
+
+    @Test fun removedOptionalApp_isWarning() {
+        val f = clean.copy(removedOther = listOf("Device Lock Controller"))
+        val r = Rules.report(f)
+        assertEquals(Status.WARN, r.status)
+        assertEquals("Removed: Device Lock Controller", mdmRow(f, "MDM removal traces").detail)
+    }
+
+    @Test fun noTraces_isClear() {
+        assertEquals(Status.OK, mdmRow(clean, "MDM removal traces").status)
+        assertEquals("None found", mdmRow(clean, "MDM removal traces").detail)
+    }
+
+    @Test fun cleanVerdictNeverClaimsCertainty() {
+        // An app cannot see IMEI-bound MDM; the clean verdict must say so instead of "clean".
+        for (t in listOf(En, Vi)) {
+            val r = Rules.report(clean, t)
+            assertFalse(r.headline.contains("clean", ignoreCase = true) || r.headline.contains("sạch"))
+            assertTrue(r.sub.contains("IMEI"))
+        }
     }
 
     @Test fun securityWarnings_doNotChangeMdmVerdict() {

@@ -49,6 +49,10 @@ interface Texts {
     fun blocked(names: String): String
     val allAllowed: String
     fun restriction(key: String): String
+    val traces: String
+    fun tracesFound(names: String): String
+    fun tracesRemoved(names: String): String
+    val noTraces: String
 
     // Device info
     val deviceTitle: String
@@ -134,8 +138,9 @@ object En : Texts {
     override val managed = "Device is managed"
     override val review = "Worth a closer look"
     override fun reviewSub(n: Int) = "${items(n)} to review"
-    override val clean = "Device is clean"
-    override val noMdm = "No MDM detected"
+    // Never claim "clean": IMEI-bound (zero-touch) MDM is invisible to any app.
+    override val clean = "No MDM found"
+    override val noMdm = "IMEI-bound MDM can't be checked by an app"
 
     override val mdmTitle = "Management signs"
     override fun mdmIssues(bad: Int, of: Int) = "$bad/$of with issues"
@@ -160,6 +165,10 @@ object En : Texts {
     override val blockedFeatures = "Blocked features"
     override fun blocked(names: String) = "Blocked: $names"
     override val allAllowed = "Reset, uninstall and USB all allowed"
+    override val traces = "MDM removal traces"
+    override fun tracesFound(names: String) = "Removed or disabled: $names. Sign of an \"MDM fix\""
+    override fun tracesRemoved(names: String) = "Removed: $names"
+    override val noTraces = "None found"
     override fun restriction(key: String) = when (key) {
         "no_factory_reset" -> "factory reset"
         "no_uninstall_apps" -> "uninstalling apps"
@@ -243,8 +252,8 @@ object Vi : Texts {
     override val managed = "Máy đang bị quản lý"
     override val review = "Cần xem thêm"
     override fun reviewSub(n: Int) = "${items(n)} nên kiểm tra lại"
-    override val clean = "Máy sạch"
-    override val noMdm = "Không phát hiện MDM"
+    override val clean = "Không thấy MDM"
+    override val noMdm = "Riêng MDM theo IMEI thì app không kiểm được"
 
     override val mdmTitle = "Dấu hiệu quản lý"
     override fun mdmIssues(bad: Int, of: Int) = "$bad/$of mục có vấn đề"
@@ -269,6 +278,10 @@ object Vi : Texts {
     override val blockedFeatures = "Tính năng bị chặn"
     override fun blocked(names: String) = "Bị chặn: $names"
     override val allAllowed = "Reset, gỡ app, USB đều được"
+    override val traces = "Dấu vết gỡ MDM"
+    override fun tracesFound(names: String) = "Đã gỡ hoặc tắt: $names. Dấu hiệu máy đã \"fix MDM\""
+    override fun tracesRemoved(names: String) = "Đã gỡ: $names"
+    override val noTraces = "Không thấy dấu vết"
     override fun restriction(key: String) = when (key) {
         "no_factory_reset" -> "khôi phục gốc"
         "no_uninstall_apps" -> "gỡ app"
