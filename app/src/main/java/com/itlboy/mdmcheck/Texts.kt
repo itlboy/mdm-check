@@ -101,6 +101,7 @@ interface Texts {
     val checkAgain: String
     val back: String
     fun homeSetup(date: String): String
+    fun lineSetup(date: String): String
     val homeSetupUnknown: String
     val infoTitle: String
     val infoBody1: String
@@ -214,6 +215,7 @@ object En : Texts {
     override val checkAgain = "Check again"
     override val back = "Back"
     override fun homeSetup(date: String) = "Setup date $date"
+    override fun lineSetup(date: String) = "Set up $date"
     override val homeSetupUnknown = "Setup date unknown"
     override val infoTitle = "What is the setup date?"
     override val infoBody1 = "The day this phone was last set up: its first boot as a new phone, or its most recent factory reset."
@@ -322,6 +324,7 @@ object Vi : Texts {
     override val checkAgain = "Kiểm tra lại"
     override val back = "Quay lại"
     override fun homeSetup(date: String) = "Thiết lập máy $date"
+    override fun lineSetup(date: String) = "Thiết lập $date"
     override val homeSetupUnknown = "Thiết lập máy không rõ"
     override val infoTitle = "Thiết lập máy là gì?"
     override val infoBody1 = "Là ngày máy được cài đặt lần gần nhất: lần đầu bật máy mới, hoặc lần khôi phục cài đặt gốc gần nhất."

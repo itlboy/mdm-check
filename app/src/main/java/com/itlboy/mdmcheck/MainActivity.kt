@@ -158,12 +158,10 @@ private fun Header(onBack: (() -> Unit)? = null) {
 
 @Composable
 private fun DeviceLine(d: DeviceSummary) {
-    // Two fixed lines (name, then setup date) so long names never wrap mid-phrase.
-    Text(d.name, Modifier.padding(top = 8.dp), fontSize = 16.sp, color = Muted, textAlign = TextAlign.Center,
-        maxLines = 1, overflow = TextOverflow.Ellipsis)
-    d.setup?.let {
-        Text(tx.lineSetup(Rules.fmtDate(it, tx)), fontSize = 15.sp, color = Muted, textAlign = TextAlign.Center, maxLines = 1)
-    }
+    // One line, small enough for long names ("OPPO Find X9 Ultra · Set up 21/10/2026"); never wraps.
+    val text = d.name + (d.setup?.let { " · " + tx.lineSetup(Rules.fmtDate(it, tx)) } ?: "")
+    Text(text, Modifier.padding(top = 6.dp), fontSize = 14.sp, color = Muted, textAlign = TextAlign.Center,
+        maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
