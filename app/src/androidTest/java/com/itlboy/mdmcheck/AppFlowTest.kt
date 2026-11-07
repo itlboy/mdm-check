@@ -44,11 +44,11 @@ class AppFlowTest {
         rule.onNodeWithText("Dấu hiệu quản lý").performScrollTo().performClick()
         rule.onNodeWithText("Ứng dụng quản trị").assertIsDisplayed()
         rule.onNodeWithText("Tính năng bị chặn").performScrollTo().assertIsDisplayed()
-        rule.onNodeWithContentDescription("Quay lại").performClick()
+        rule.onNodeWithContentDescription("Quay lại").performScrollTo().performClick()
 
         rule.onNodeWithText("Lịch sử máy").performScrollTo().performClick()
         rule.onNodeWithText("Thiết lập máy").assertIsDisplayed()
-        rule.onNodeWithContentDescription("Quay lại").performClick()
+        rule.onNodeWithContentDescription("Quay lại").performScrollTo().performClick()
 
         rule.onNodeWithText("Kiểm tra lại").performScrollTo().performClick()
         rule.waitUntilAtLeastOneExists(anyVerdict, 10_000)
