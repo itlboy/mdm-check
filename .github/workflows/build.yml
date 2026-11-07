@@ -50,14 +50,37 @@ jobs:
           gradle-version: "8.11.1"
       - name: Build trước (giả lập chỉ chạy test)
         run: gradle assembleDebug assembleDebugAndroidTest --no-daemon
+      # Giả lập đã khởi động sẵn được lưu thành snapshot: lần sau vào thẳng, khỏi boot nguội.
+      # Đổi api-level/profile thì đổi key để tạo snapshot mới.
+      - name: Cache giả lập
+        uses: actions/cache@v4
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-34-default-pixel6-v1
+      - name: Tạo snapshot giả lập (chỉ khi chưa có cache)
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: default
+          profile: pixel_6
+          arch: x86_64
+          force-avd-creation: false
+          disable-animations: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: echo "Đã tạo snapshot giả lập để cache."
       - uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
           target: default
           profile: pixel_6
           arch: x86_64
+          force-avd-creation: false
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: gradle connectedDebugAndroidTest --no-daemon
       - if: failure()
         uses: actions/upload-artifact@v4
@@ -76,25 +99,37 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # cần tag của bản trước để so thay đổi
       - name: Tính số phiên bản (1.0, 1.1, …)
+        id: ver
         run: |
           latest=$(gh release view --json tagName -q .tagName 2>/dev/null || true)
           if [ -z "$latest" ]; then
             v="1.0"
           else
+            # Chỉ sửa CI/README thì không ra bản mới.
+            if git diff --quiet "$latest" HEAD -- app build.gradle.kts settings.gradle.kts; then
+              echo "Không có thay đổi app kể từ $latest: bỏ qua phát hành."
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
             IFS=. read -r major minor <<<"${latest#v}"
             v="$major.$((minor + 1))"
           fi
           echo "APP_VERSION=$v" >> "$GITHUB_ENV"
           echo "Phiên bản: $v (bản trước: ${latest:-chưa có})"
-      - uses: actions/setup-java@v4
+      - if: steps.ver.outputs.skip != 'true'
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
-      - uses: gradle/actions/setup-gradle@v4
+      - if: steps.ver.outputs.skip != 'true'
+        uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.11.1"
       - name: Build APK release ký bằng khoá cố định
+        if: steps.ver.outputs.skip != 'true'
         env:
           SIGNING_KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_B64 }}
           SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
@@ -105,6 +140,7 @@ jobs:
           SIGNING_KEYSTORE="$RUNNER_TEMP/mdm-check.p12" gradle assembleRelease --no-daemon
           rm -f "$RUNNER_TEMP/mdm-check.p12"
       - name: Tạo release
+        if: steps.ver.outputs.skip != 'true'
         run: |
           cp app/build/outputs/apk/release/app-release.apk "cozy-mdm-check-$APP_VERSION.apk"
           gh release create "v$APP_VERSION" "cozy-mdm-check-$APP_VERSION.apk" \
