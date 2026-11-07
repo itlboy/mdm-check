@@ -7,7 +7,6 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Rule
 import org.junit.Test
@@ -38,19 +37,19 @@ class AppFlowTest {
         rule.waitUntilAtLeastOneExists(anyVerdict, 10_000)
 
         for (title in listOf("Dấu hiệu quản lý", "Thông tin máy", "Lịch sử máy", "Bảo mật khác")) {
-            rule.onNodeWithText(title).performScrollTo().assertIsDisplayed()
+            rule.onNodeWithText(title).assertIsDisplayed()
         }
 
-        rule.onNodeWithText("Dấu hiệu quản lý").performScrollTo().performClick()
+        rule.onNodeWithText("Dấu hiệu quản lý").performClick()
         rule.onNodeWithText("Ứng dụng quản trị").assertIsDisplayed()
-        rule.onNodeWithText("Tính năng bị chặn").performScrollTo().assertIsDisplayed()
-        rule.onNodeWithContentDescription("Quay lại").performScrollTo().performClick()
+        rule.onNodeWithText("Tính năng bị chặn").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Quay lại").performClick()
 
-        rule.onNodeWithText("Lịch sử máy").performScrollTo().performClick()
+        rule.onNodeWithText("Lịch sử máy").performClick()
         rule.onNodeWithText("Thiết lập máy").assertIsDisplayed()
-        rule.onNodeWithContentDescription("Quay lại").performScrollTo().performClick()
+        rule.onNodeWithContentDescription("Quay lại").performClick()
 
-        rule.onNodeWithText("Kiểm tra lại").performScrollTo().performClick()
+        rule.onNodeWithText("Kiểm tra lại").performClick()
         rule.waitUntilAtLeastOneExists(anyVerdict, 10_000)
     }
 }

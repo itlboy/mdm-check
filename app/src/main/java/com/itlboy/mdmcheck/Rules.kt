@@ -36,6 +36,8 @@ data class Facts(
     val orgOwned: Boolean,
     val profileOwner: String?,
     val profiles: Int,
+    /** Số hồ sơ phụ là hồ sơ công việc; -1 = không phân định được. */
+    val workProfiles: Int,
     val knownApps: List<String>,
     val blocked: List<String>,
     val bootState: String,
@@ -69,14 +71,27 @@ object Rules {
             "${parts[2]}/${parts[1]}/${parts[0]}" else p
     }
 
-    fun deviceName(setting: String?, manufacturer: String, model: String): String {
-        if (!setting.isNullOrBlank()) return setting.trim()
-        val brand = manufacturer.replaceFirstChar { it.titlecase(Locale.ROOT) }
-        return if (model.startsWith(manufacturer, ignoreCase = true)) model else "$brand $model".trim()
+    /**
+     * Ưu tiên: tên thương mại của hãng ("Mi 10S" → "Xiaomi Mi 10S") → tên máy trong Cài đặt
+     * (nếu không chỉ là mã model) → "Hãng + mã model".
+     */
+    fun deviceName(market: String?, setting: String?, brand: String, manufacturer: String, model: String): String {
+        fun cap(s: String) = s.replaceFirstChar { it.titlecase(Locale.ROOT) }
+        fun withBrand(name: String): String {
+            val n = name.trim()
+            val prefixed = listOf(brand, manufacturer).any { it.isNotBlank() && n.startsWith(it, ignoreCase = true) }
+            val b = cap(brand.ifBlank { manufacturer })
+            return if (prefixed || b.isBlank()) n else "$b $n"
+        }
+        if (!market.isNullOrBlank()) return withBrand(market)
+        val s = setting?.trim()
+        if (!s.isNullOrEmpty() && !s.equals(model.trim(), ignoreCase = true)) return s
+        return withBrand(model)
     }
 
-    /** Lấy thời điểm sớm nhất hợp lệ; bỏ giá trị 0 hoặc trước 2015 (đồng hồ chưa chỉnh). */
-    fun setupTime(times: List<Long>): Long? = times.filter { it > YEAR_2015 }.minOrNull()
+    /** Lấy thời điểm sớm nhất hợp lệ; bỏ giá trị trước 2015 (ngày giả 2009 của ảnh hệ thống) và sau [now]. */
+    fun setupTime(times: List<Long>, now: Long = Long.MAX_VALUE): Long? =
+        times.filter { it > YEAR_2015 && it <= now }.minOrNull()
 
     /** "v0.1.12" → Latest("0.1.12", url). Tag rỗng hoặc không có số → null. */
     fun parseRelease(tag: String?, url: String?): Latest? {
@@ -123,11 +138,15 @@ object Rules {
             f.orgOwned -> CheckRow("Máy do tổ chức quản lý", "Máy thuộc sở hữu của tổ chức", Status.BAD)
             else -> CheckRow("Máy do tổ chức quản lý", "Không có tổ chức nào", Status.OK)
         }
-        // Hồ sơ phụ cũng có thể là app nhân bản của ColorOS, nên chỉ cảnh báo.
+        // Hồ sơ phụ thường là Ứng dụng kép / Không gian thứ hai: chỉ báo đỏ khi chắc là hồ sơ công việc.
+        val extra = f.profiles - 1
         val profile = when {
             f.profileOwner != null -> CheckRow("Hồ sơ công việc", "Quản lý bởi ${f.profileOwner}", Status.BAD)
-            f.profiles > 1 -> CheckRow("Hồ sơ công việc",
-                "Có ${f.profiles - 1} hồ sơ phụ. Không dùng app nhân bản thì có thể là hồ sơ công việc", Status.WARN)
+            f.workProfiles > 0 -> CheckRow("Hồ sơ công việc", "Máy đang có hồ sơ công việc", Status.BAD)
+            extra > 0 && f.workProfiles < 0 -> CheckRow("Hồ sơ công việc",
+                "Có $extra hồ sơ phụ, không xác định được loại", Status.WARN)
+            extra > 0 -> CheckRow("Hồ sơ công việc",
+                "Không có. Hồ sơ phụ là Ứng dụng kép / Không gian thứ hai", Status.OK)
             else -> CheckRow("Hồ sơ công việc", "Chỉ có hồ sơ cá nhân", Status.OK)
         }
         val known = if (f.knownApps.isNotEmpty())

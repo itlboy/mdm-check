@@ -39,20 +39,57 @@ object Collector {
         UserManager.DISALLOW_USB_FILE_TRANSFER to "chép file qua USB",
     )
 
+    /** Tên thương mại hãng ghi trong hệ thống (Xiaomi, OPPO/realme/OnePlus, Huawei…). */
+    private val MARKET_PROPS = listOf(
+        "ro.product.marketname", "ro.product.vendor.marketname", "ro.product.odm.marketname",
+        "ro.vendor.oplus.market.name", "ro.oppo.market.name", "ro.config.marketing_name",
+    )
+
     fun deviceName(ctx: Context): String {
-        val n = runCatching { Settings.Global.getString(ctx.contentResolver, Settings.Global.DEVICE_NAME) }.getOrNull()
-        return Rules.deviceName(n, Build.MANUFACTURER, Build.MODEL)
+        val market = MARKET_PROPS.map { prop(it) }.firstOrNull { it.isNotBlank() }
+        val setting = runCatching { Settings.Global.getString(ctx.contentResolver, Settings.Global.DEVICE_NAME) }.getOrNull()
+        return Rules.deviceName(market, setting, Build.BRAND, Build.MANUFACTURER, Build.MODEL)
     }
 
     /**
-     * Ngày thiết lập máy ≈ lần đầu bật máy hoặc lần khôi phục cài đặt gốc gần nhất:
-     * gói hệ thống được "cài" đúng lúc máy khởi động lần đầu sau khi xoá sạch.
+     * Ngày thiết lập máy ≈ lần đầu bật máy hoặc lần khôi phục cài đặt gốc gần nhất.
+     * Hai nguồn: gói hệ thống (một số máy ghi đúng giờ khởi động đầu, số khác ghi 2009 → bị loại)
+     * và app cài sẵn không thuộc hệ thống (hãng cài lúc thiết lập máy).
      */
     fun setupTime(ctx: Context): Long? {
         val pm = ctx.packageManager
-        val times = listOf("android", "com.android.providers.settings", "com.android.settings")
+        val system = listOf("android", "com.android.providers.settings", "com.android.settings")
             .mapNotNull { runCatching { pm.getPackageInfo(it, 0).firstInstallTime }.getOrNull() }
-        return Rules.setupTime(times)
+        val preloaded = runCatching { pm.getInstalledPackages(0) }.getOrDefault(emptyList())
+            .filter { p -> p.packageName != ctx.packageName && (p.applicationInfo?.flags ?: 0) and ApplicationInfo.FLAG_SYSTEM == 0 }
+            .map { it.firstInstallTime }
+        return Rules.setupTime(system + preloaded, System.currentTimeMillis())
+    }
+
+    /**
+     * Đếm hồ sơ phụ là hồ sơ CÔNG VIỆC: Android gắn nhãn "… công việc" cho app trong hồ sơ đó.
+     * Nhân bản app / Không gian thứ hai không có nhãn này. Trả -1 nếu không phân định được.
+     */
+    private fun workProfiles(ctx: Context, um: UserManager): Int {
+        val me = android.os.Process.myUserHandle()
+        val others = runCatching { um.userProfiles }.getOrDefault(emptyList()).filter { it != me }
+        if (others.isEmpty()) return 0
+        val res = android.content.res.Resources.getSystem()
+        val probe = "MDMCHECK"
+        fun badge(name: String) = res.getIdentifier(name, "string", "android")
+            .takeIf { it != 0 }?.let { runCatching { res.getString(it, probe) }.getOrNull() }
+        val work = badge("managed_profile_label_badge")
+        val clone = badge("clone_profile_label_badge")
+        var count = 0
+        for (u in others) {
+            val label = runCatching { ctx.packageManager.getUserBadgedLabel(probe, u).toString() }.getOrNull() ?: return -1
+            when {
+                label == probe || label == clone -> Unit
+                work != null && label == work -> count++
+                else -> return -1
+            }
+        }
+        return count
     }
 
     fun summary(ctx: Context) = DeviceSummary(deviceName(ctx), Build.VERSION.RELEASE, setupTime(ctx))
@@ -91,6 +128,7 @@ object Collector {
             orgOwned = orgOwned,
             profileOwner = profileOwner?.let { label(pm, it) },
             profiles = runCatching { um.userProfiles.size }.getOrDefault(1),
+            workProfiles = workProfiles(ctx, um),
             knownApps = KNOWN.keys.filter { installed(pm, it) }.map { KNOWN.getValue(it) }.distinct(),
             blocked = RESTRICTIONS.filter { runCatching { um.hasUserRestriction(it.first) }.getOrDefault(false) }
                 .map { it.second },

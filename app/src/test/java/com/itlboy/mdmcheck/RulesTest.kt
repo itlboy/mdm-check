@@ -17,7 +17,7 @@ class RulesTest {
         securityPatch = "2026-10-01", display = "PHZ110_16.0.0.100", buildTime = now - 60 * day,
         setupTime = now - 2 * day, uptimeMs = 3 * 3_600_000L, now = now,
         userAdmins = emptyList(), systemAdmins = emptyList(), deviceOwner = null, orgOwned = false,
-        profileOwner = null, profiles = 1, knownApps = emptyList(), blocked = emptyList(),
+        profileOwner = null, profiles = 1, workProfiles = 0, knownApps = emptyList(), blocked = emptyList(),
         bootState = "green", rooted = false, devOptions = false, adb = false,
     )
 
@@ -63,13 +63,32 @@ class RulesTest {
         assertEquals(Status.BAD, mdmRow(f, "Hồ sơ công việc").status)
     }
 
-    @Test fun extraProfile_isOnlyWarning() {
-        // ColorOS "nhân bản app" cũng tạo hồ sơ phụ: không được báo đỏ.
-        val f = clean.copy(profiles = 2)
+    @Test fun dualAppsProfile_isClean() {
+        // Ứng dụng kép / Không gian thứ hai (MIUI, ColorOS) tạo hồ sơ phụ không phải hồ sơ công việc.
+        val f = clean.copy(profiles = 2, workProfiles = 0)
+        val r = Rules.report(f)
+        assertEquals(Status.OK, r.status)
+        assertEquals("Máy sạch", r.headline)
+        assertTrue(mdmRow(f, "Hồ sơ công việc").detail.contains("Ứng dụng kép"))
+    }
+
+    @Test fun workProfile_isManaged() {
+        val f = clean.copy(profiles = 2, workProfiles = 1)
+        assertEquals(Status.BAD, mdmRow(f, "Hồ sơ công việc").status)
+        assertEquals(Status.BAD, Rules.report(f).status)
+    }
+
+    @Test fun unknownProfile_isOnlyWarning() {
+        val f = clean.copy(profiles = 2, workProfiles = -1)
         val r = Rules.report(f)
         assertEquals(Status.WARN, r.status)
         assertEquals("Cần xem thêm", r.headline)
         assertEquals("1/5 mục cần xem", r.sections[0].summary)
+    }
+
+    @Test fun singleProfile_unknownBadge_isClean() {
+        // -1 chỉ có nghĩa khi có hồ sơ phụ.
+        assertEquals(Status.OK, mdmRow(clean.copy(workProfiles = -1), "Hồ sơ công việc").status)
     }
 
     @Test fun knownApp_isManaged() {
@@ -131,18 +150,28 @@ class RulesTest {
     }
 
     @Test fun deviceName_fallbacks() {
-        assertEquals("OPPO Find X9 Ultra", Rules.deviceName(" OPPO Find X9 Ultra ", "OPPO", "PHZ110"))
-        assertEquals("OPPO PHZ110", Rules.deviceName(null, "OPPO", "PHZ110"))
-        assertEquals("Google Pixel 9", Rules.deviceName("", "google", "Pixel 9"))
-        assertEquals("Google Pixel 9", Rules.deviceName(null, "Google", "Pixel 9"))
-        assertEquals("Samsung SM-S928B", Rules.deviceName("  ", "samsung", "SM-S928B"))
-        assertEquals("OPPO CPH2581", Rules.deviceName(null, "OPPO", "OPPO CPH2581"))
+        // Tên thương mại của hãng được ưu tiên, tự thêm hãng nếu thiếu.
+        assertEquals("Xiaomi Mi 10S", Rules.deviceName("Mi 10S", "M2102J2SC", "Xiaomi", "Xiaomi", "M2102J2SC"))
+        assertEquals("Redmi Note 13", Rules.deviceName("Redmi Note 13", null, "Redmi", "Xiaomi", "23129RAA4G"))
+        assertEquals("OPPO Find X9 Ultra", Rules.deviceName("OPPO Find X9 Ultra", null, "OPPO", "OPPO", "PHZ110"))
+        // Tên trong Cài đặt chỉ là mã model (MIUI) → bỏ, dùng hãng + mã.
+        assertEquals("Xiaomi M2102J2SC", Rules.deviceName(null, "M2102J2SC", "Xiaomi", "Xiaomi", "M2102J2SC"))
+        assertEquals("OPPO Find X9 Ultra", Rules.deviceName(null, " OPPO Find X9 Ultra ", "OPPO", "OPPO", "PHZ110"))
+        assertEquals("OPPO PHZ110", Rules.deviceName("", null, "OPPO", "OPPO", "PHZ110"))
+        assertEquals("Google Pixel 9", Rules.deviceName(null, "", "google", "Google", "Pixel 9"))
+        assertEquals("Samsung SM-S928B", Rules.deviceName(null, "  ", "samsung", "samsung", "SM-S928B"))
+        assertEquals("OPPO CPH2581", Rules.deviceName(null, null, "OPPO", "OPPO", "OPPO CPH2581"))
     }
 
     @Test fun setupTime_picksEarliestValid() {
         assertEquals(1_600_000_000_000L, Rules.setupTime(listOf(0L, 1_700_000_000_000L, 1_600_000_000_000L)))
         assertNull(Rules.setupTime(listOf(0L, 1_000L)))
         assertNull(Rules.setupTime(emptyList()))
+        // Ngày giả 2009 của ảnh hệ thống bị loại, còn lại app cài sẵn lúc thiết lập máy.
+        assertEquals(1_620_000_000_000L, Rules.setupTime(listOf(1_230_768_000_000L, 1_620_000_000_000L, 1_700_000_000_000L)))
+        // Giờ tương lai (đồng hồ sai) bị loại.
+        assertEquals(1_600_000_000_000L, Rules.setupTime(listOf(1_600_000_000_000L, 1_900_000_000_000L), 1_800_000_000_000L))
+        assertNull(Rules.setupTime(listOf(1_900_000_000_000L), 1_800_000_000_000L))
     }
 
     // ---- Định dạng ----

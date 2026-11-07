@@ -3,6 +3,12 @@
 
     <!-- Chỉ dùng để hỏi GitHub bản mới nhất; việc kiểm tra máy không gửi gì đi. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Cần thấy mọi app để ước tính ngày thiết lập máy (app cài sẵn lúc bật máy lần đầu)
+         và tìm agent MDM. App phát hành ngoài CH Play nên không vướng chính sách Play. -->
+    <uses-permission
+        android:name="android.permission.QUERY_ALL_PACKAGES"
+        xmlns:tools="http://schemas.android.com/tools"
+        tools:ignore="QueryAllPackagesPermission" />
 
     <!-- Android 11+ ẩn app khác với app thường; khai báo những gì cần nhìn thấy. -->
     <queries>

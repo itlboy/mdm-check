@@ -21,10 +21,8 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -53,6 +51,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
@@ -256,38 +255,37 @@ private fun Card(content: @Composable () -> Unit) {
 
 @Composable
 private fun ResultScreen(d: DeviceSummary, v: VersionState, r: Report, onOpen: (Int) -> Unit, onAgain: () -> Unit) {
+    // Không cuộn: mọi thứ vừa một màn hình, khoảng trống co giãn đẩy nút xuống đáy.
     val t = tone(r.status)
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 24.dp),
+        Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Header()
         DeviceLine(d)
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.weight(0.6f))
         Box(
-            Modifier.size(120.dp).clip(CircleShape).background(t.solid.copy(alpha = 0.14f)),
+            Modifier.size(100.dp).clip(CircleShape).background(t.solid.copy(alpha = 0.14f)),
             contentAlignment = Alignment.Center,
         ) {
-            Box(Modifier.size(96.dp).clip(CircleShape).background(t.solid), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(80.dp).clip(CircleShape).background(t.solid), contentAlignment = Alignment.Center) {
                 Icon(if (r.status == Status.OK) Ic.check else if (r.status == Status.BAD) Ic.x else Ic.alert,
-                    contentDescription = null, tint = Color.White, modifier = Modifier.size(48.dp))
+                    contentDescription = null, tint = Color.White, modifier = Modifier.size(40.dp))
             }
         }
-        Spacer(Modifier.height(20.dp))
-        Text(r.headline, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, color = Ink, textAlign = TextAlign.Center)
-        Spacer(Modifier.height(6.dp))
-        Text(r.sub, fontSize = 17.sp, color = Muted, textAlign = TextAlign.Center)
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(14.dp))
+        Text(r.headline, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = Ink, textAlign = TextAlign.Center)
+        Text(r.sub, Modifier.padding(top = 4.dp), fontSize = 16.sp, color = Muted, textAlign = TextAlign.Center,
+            maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Spacer(Modifier.weight(0.6f))
         Card {
             r.sections.forEachIndexed { i, s ->
                 MenuRow(s) { onOpen(i) }
                 if (i < r.sections.lastIndex) HorizontalDivider(color = Line)
             }
         }
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.weight(1f))
         PrimaryButton("Kiểm tra lại", onAgain)
-        Spacer(Modifier.height(20.dp))
-        VersionPill(v)
     }
 }
 
@@ -336,7 +334,7 @@ private fun MenuRow(s: Section, onClick: () -> Unit) {
         else -> Muted
     }
     Row(
-        Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp),
+        Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(chip.bg), contentAlignment = Alignment.Center) {
@@ -344,7 +342,7 @@ private fun MenuRow(s: Section, onClick: () -> Unit) {
         }
         Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
             Text(s.title, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Ink)
-            Text(s.summary, fontSize = 15.sp, color = subColor)
+            Text(s.summary, fontSize = 15.sp, color = subColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Icon(Ic.chevron, contentDescription = null, tint = Faint, modifier = Modifier.size(20.dp))
     }
@@ -352,33 +350,38 @@ private fun MenuRow(s: Section, onClick: () -> Unit) {
 
 @Composable
 private fun DetailScreen(d: DeviceSummary, s: Section, onBack: () -> Unit) {
+    // Không cuộn: tiêu đề mục gọn trên một hàng, mỗi dòng tối đa 2 dòng giải thích.
     val chip = sectionChip(s)
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 24.dp),
+        Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Header(onBack)
         DeviceLine(d)
-        Spacer(Modifier.height(32.dp))
-        Box(Modifier.size(64.dp).clip(RoundedCornerShape(20.dp)).background(chip.bg), contentAlignment = Alignment.Center) {
-            Icon(sectionIcon(s.kind), contentDescription = null, tint = chip.fg, modifier = Modifier.size(32.dp))
+        Spacer(Modifier.weight(0.5f))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(chip.bg), contentAlignment = Alignment.Center) {
+                Icon(sectionIcon(s.kind), contentDescription = null, tint = chip.fg, modifier = Modifier.size(26.dp))
+            }
+            Column(Modifier.padding(start = 14.dp)) {
+                Text(s.title, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = Ink)
+                Text(s.summary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+                    color = if (s.kind == Kind.MDM) tone(s.status).fg else Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
-        Spacer(Modifier.height(16.dp))
-        Text(s.title, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, color = Ink)
-        Text(s.summary, Modifier.padding(top = 4.dp), fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
-            color = if (s.kind == Kind.MDM) tone(s.status).fg else Muted, textAlign = TextAlign.Center)
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.weight(0.5f))
         Card {
             s.rows.forEachIndexed { i, row ->
                 DetailRow(row)
                 if (i < s.rows.lastIndex) HorizontalDivider(color = Line)
             }
         }
+        Spacer(Modifier.weight(1f))
         if (s.kind == Kind.MDM) {
             Text(
-                "Chưa kiểm được MDM gắn theo IMEI (zero-touch). Muốn chắc: khôi phục cài đặt gốc rồi thiết lập lại có Wi‑Fi.",
-                Modifier.padding(top = 24.dp, start = 8.dp, end = 8.dp),
-                fontSize = 15.sp, lineHeight = 22.sp, color = Muted, textAlign = TextAlign.Center,
+                "Chưa kiểm được MDM gắn theo IMEI (zero-touch). Muốn chắc: reset máy rồi thiết lập lại có Wi‑Fi.",
+                Modifier.padding(horizontal = 8.dp),
+                fontSize = 14.sp, lineHeight = 20.sp, color = Muted, textAlign = TextAlign.Center,
             )
         }
     }
@@ -387,12 +390,13 @@ private fun DetailScreen(d: DeviceSummary, s: Section, onBack: () -> Unit) {
 @Composable
 private fun DetailRow(row: CheckRow) {
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f).padding(end = 12.dp)) {
-            Text(row.name, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Ink)
-            if (row.detail.isNotBlank()) Text(row.detail, fontSize = 15.sp, color = Muted)
+            Text(row.name, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Ink)
+            if (row.detail.isNotBlank()) Text(row.detail, fontSize = 14.sp, color = Muted,
+                maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         val t = tone(row.status)
         when {
