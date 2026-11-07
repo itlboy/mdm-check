@@ -39,6 +39,7 @@ data class Facts(
     /** Number of extra profiles that are work profiles; -1 = could not tell. */
     val workProfiles: Int,
     val knownApps: List<String>,
+    /** UserManager restriction keys in force, e.g. "no_factory_reset". */
     val blocked: List<String>,
     val bootState: String,
     val rooted: Boolean,
@@ -46,37 +47,32 @@ data class Facts(
     val adb: Boolean,
 )
 
-/** All verdict logic. Pure functions: same [Facts] → same [Report]. */
+/** All verdict logic. Pure functions: same [Facts] + [Texts] → same [Report]. */
 object Rules {
     private const val YEAR_2015 = 1_420_070_400_000L
 
-    /** "5 Nov 2026": unambiguous whatever the reader's date habits. */
-    fun fmtDate(t: Long, tz: TimeZone = TimeZone.getDefault()): String =
-        SimpleDateFormat("d MMM yyyy", Locale.US).apply { timeZone = tz }.format(Date(t))
+    fun fmtDate(t: Long, tx: Texts = En, tz: TimeZone = TimeZone.getDefault()): String =
+        SimpleDateFormat(tx.datePattern, tx.dateLocale).apply { timeZone = tz }.format(Date(t))
 
-    fun agoText(t: Long, now: Long): String {
+    fun agoText(t: Long, now: Long, tx: Texts = En): String {
         val d = TimeUnit.MILLISECONDS.toDays(now - t)
-        return when {
-            d <= 0 -> "today"
-            d == 1L -> "1 day ago"
-            else -> "$d days ago"
-        }
+        return if (d <= 0) tx.today else tx.daysAgo(d)
     }
 
-    fun uptimeText(ms: Long): String {
+    fun uptimeText(ms: Long, tx: Texts = En): String {
         val hours = TimeUnit.MILLISECONDS.toHours(ms)
-        return if (hours >= 24) "${hours / 24}d ${hours % 24}h"
-        else "${hours}h ${TimeUnit.MILLISECONDS.toMinutes(ms) % 60}m"
+        return if (hours >= 24) tx.uptimeDays(hours / 24, hours % 24)
+        else tx.uptimeHours(hours, TimeUnit.MILLISECONDS.toMinutes(ms) % 60)
     }
 
-    /** "2026-10-01" → "1 Oct 2026"; anything unexpected is returned as is. */
-    fun formatPatch(p: String): String {
+    /** "2026-10-01" → the date in the reader's format; anything unexpected is returned as is. */
+    fun formatPatch(p: String, tx: Texts = En): String {
         if (!Regex("""\d{4}-\d{2}-\d{2}""").matches(p)) return p
         val utc = TimeZone.getTimeZone("UTC")
         val parsed = runCatching {
             SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = utc; isLenient = false }.parse(p)
         }.getOrNull() ?: return p
-        return fmtDate(parsed.time, utc)
+        return fmtDate(parsed.time, tx, utc)
     }
 
     /**
@@ -121,108 +117,102 @@ object Rules {
         return false
     }
 
-    private fun plural(n: Int, one: String, many: String) = if (n == 1) "1 $one" else "$n $many"
-
-    fun report(f: Facts): Report {
-        val mdm = mdm(f)
-        val sections = listOf(mdm, device(f), history(f), security(f))
+    fun report(f: Facts, tx: Texts = En): Report {
+        val mdm = mdm(f, tx)
+        val sections = listOf(mdm, device(f, tx), history(f, tx), security(f, tx))
         val bad = mdm.rows.filter { it.status == Status.BAD }
         val warn = mdm.rows.count { it.status == Status.WARN }
         return when {
-            bad.isNotEmpty() -> Report(Status.BAD, "Device is managed", bad.first().detail, sections)
-            warn > 0 -> Report(Status.WARN, "Worth a closer look", plural(warn, "item", "items") + " to review", sections)
-            else -> Report(Status.OK, "Device is clean", "No MDM detected", sections)
+            bad.isNotEmpty() -> Report(Status.BAD, tx.managed, bad.first().detail, sections)
+            warn > 0 -> Report(Status.WARN, tx.review, tx.reviewSub(warn), sections)
+            else -> Report(Status.OK, tx.clean, tx.noMdm, sections)
         }
     }
 
-    fun mdm(f: Facts): Section {
+    fun mdm(f: Facts, tx: Texts = En): Section {
         val admin = when {
-            f.userAdmins.isNotEmpty() ->
-                CheckRow("Device admin apps", f.userAdmins.joinToString() + " active", Status.BAD)
-            f.systemAdmins.isNotEmpty() ->
-                CheckRow("Device admin apps", "System apps only: " + f.systemAdmins.joinToString(), Status.OK)
-            else -> CheckRow("Device admin apps", "None active", Status.OK)
+            f.userAdmins.isNotEmpty() -> CheckRow(tx.admins, tx.adminsActive(f.userAdmins.joinToString()), Status.BAD)
+            f.systemAdmins.isNotEmpty() -> CheckRow(tx.admins, tx.adminsSystemOnly(f.systemAdmins.joinToString()), Status.OK)
+            else -> CheckRow(tx.admins, tx.adminsNone, Status.OK)
         }
         val owner = when {
-            f.deviceOwner != null -> CheckRow("Organization-owned", "Managed by ${f.deviceOwner}", Status.BAD)
-            f.orgOwned -> CheckRow("Organization-owned", "Owned by an organization", Status.BAD)
-            else -> CheckRow("Organization-owned", "No organization", Status.OK)
+            f.deviceOwner != null -> CheckRow(tx.orgOwned, tx.managedBy(f.deviceOwner), Status.BAD)
+            f.orgOwned -> CheckRow(tx.orgOwned, tx.ownedByOrg, Status.BAD)
+            else -> CheckRow(tx.orgOwned, tx.noOrg, Status.OK)
         }
         // Extra profiles are usually Dual Apps / Second Space: only red when it is surely a work profile.
         val extra = f.profiles - 1
         val profile = when {
-            f.profileOwner != null -> CheckRow("Work profile", "Managed by ${f.profileOwner}", Status.BAD)
-            f.workProfiles > 0 -> CheckRow("Work profile", "A work profile is present", Status.BAD)
-            extra > 0 && f.workProfiles < 0 -> CheckRow("Work profile",
-                plural(extra, "extra profile", "extra profiles") + " of unknown type", Status.WARN)
-            extra > 0 -> CheckRow("Work profile", "None. Extra profile is Dual Apps / Second Space", Status.OK)
-            else -> CheckRow("Work profile", "Personal profile only", Status.OK)
+            f.profileOwner != null -> CheckRow(tx.workProfile, tx.managedBy(f.profileOwner), Status.BAD)
+            f.workProfiles > 0 -> CheckRow(tx.workProfile, tx.workProfilePresent, Status.BAD)
+            extra > 0 && f.workProfiles < 0 -> CheckRow(tx.workProfile, tx.unknownProfiles(extra), Status.WARN)
+            extra > 0 -> CheckRow(tx.workProfile, tx.dualApps, Status.OK)
+            else -> CheckRow(tx.workProfile, tx.personalOnly, Status.OK)
         }
         val known = if (f.knownApps.isNotEmpty())
-            CheckRow("MDM / payment-lock apps", "Installed: " + f.knownApps.joinToString(), Status.BAD)
-        else CheckRow("MDM / payment-lock apps", "None found", Status.OK)
+            CheckRow(tx.knownApps, tx.installed(f.knownApps.joinToString()), Status.BAD)
+        else CheckRow(tx.knownApps, tx.noneFound, Status.OK)
         val blocked = if (f.blocked.isNotEmpty())
-            CheckRow("Blocked features", "Blocked: " + f.blocked.joinToString(), Status.BAD)
-        else CheckRow("Blocked features", "Reset, uninstall and USB all allowed", Status.OK)
+            CheckRow(tx.blockedFeatures, tx.blocked(f.blocked.joinToString { tx.restriction(it) }), Status.BAD)
+        else CheckRow(tx.blockedFeatures, tx.allAllowed, Status.OK)
 
         val rows = listOf(admin, owner, profile, known, blocked)
         val bad = rows.count { it.status == Status.BAD }
         val warn = rows.count { it.status == Status.WARN }
         val (status, summary) = when {
-            bad > 0 -> Status.BAD to "$bad/${rows.size} with issues"
-            warn > 0 -> Status.WARN to "$warn/${rows.size} to review"
-            else -> Status.OK to "${rows.size}/${rows.size} clear"
+            bad > 0 -> Status.BAD to tx.mdmIssues(bad, rows.size)
+            warn > 0 -> Status.WARN to tx.mdmReview(warn, rows.size)
+            else -> Status.OK to tx.mdmClear(rows.size)
         }
-        return Section(Kind.MDM, "Management signs", summary, status, rows)
+        return Section(Kind.MDM, tx.mdmTitle, summary, status, rows)
     }
 
-    fun device(f: Facts): Section {
+    fun device(f: Facts, tx: Texts = En): Section {
         val rows = listOf(
-            CheckRow("Name", f.manufacturer, value = f.deviceName),
-            CheckRow("Model", "Manufacturer code", value = f.model),
-            CheckRow("Version", "API ${f.sdk}", value = "Android ${f.release}"),
-            CheckRow("Security patch", "Newer is safer", value = formatPatch(f.securityPatch)),
-            CheckRow("Build", f.display),
+            CheckRow(tx.name, f.manufacturer, value = f.deviceName),
+            CheckRow(tx.model, tx.modelDetail, value = f.model),
+            CheckRow(tx.version, "API ${f.sdk}", value = "Android ${f.release}"),
+            CheckRow(tx.patch, tx.patchDetail, value = formatPatch(f.securityPatch, tx)),
+            CheckRow(tx.build, f.display),
         )
-        return Section(Kind.DEVICE, "Device info", "${f.deviceName} · Android ${f.release}", Status.INFO, rows)
+        return Section(Kind.DEVICE, tx.deviceTitle, "${f.deviceName} · Android ${f.release}", Status.INFO, rows)
     }
 
-    fun history(f: Facts): Section {
+    fun history(f: Facts, tx: Texts = En): Section {
         val setup = f.setupTime
         val rows = listOf(
-            if (setup != null) CheckRow("Setup date",
-                "First boot or last factory reset · ${agoText(setup, f.now)}", value = fmtDate(setup))
-            else CheckRow("Setup date", "Not readable on this device", value = "Unknown"),
-            CheckRow("OS build date", "Installed system version", value = fmtDate(f.buildTime)),
-            CheckRow("Uptime", "Since last restart", value = uptimeText(f.uptimeMs)),
+            if (setup != null) CheckRow(tx.setupDate, tx.setupDetail(agoText(setup, f.now, tx)), value = fmtDate(setup, tx))
+            else CheckRow(tx.setupDate, tx.notReadable, value = tx.unknown),
+            CheckRow(tx.buildDate, tx.buildDateDetail, value = fmtDate(f.buildTime, tx)),
+            CheckRow(tx.uptime, tx.uptimeDetail, value = uptimeText(f.uptimeMs, tx)),
         )
-        val summary = setup?.let { "Set up ${agoText(it, f.now)}" } ?: "Setup date unknown"
-        return Section(Kind.HISTORY, "Device history", summary, Status.INFO, rows)
+        val summary = setup?.let { tx.setUpAgo(agoText(it, f.now, tx)) } ?: tx.setupUnknown
+        return Section(Kind.HISTORY, tx.historyTitle, summary, Status.INFO, rows)
     }
 
-    fun bootRow(state: String): CheckRow = when (state) {
-        "green" -> CheckRow("Bootloader", "Stock manufacturer software", Status.OK, "Locked")
-        "orange" -> CheckRow("Bootloader", "Software may be modified", Status.WARN, "Unlocked")
-        "yellow" -> CheckRow("Bootloader", "Signed with a custom key", Status.WARN, "Custom key")
-        else -> CheckRow("Bootloader", "Device doesn't expose this", Status.INFO, "Unknown")
+    fun bootRow(state: String, tx: Texts = En): CheckRow = when (state) {
+        "green" -> CheckRow("Bootloader", tx.bootStock, Status.OK, tx.bootLocked)
+        "orange" -> CheckRow("Bootloader", tx.bootModified, Status.WARN, tx.bootUnlocked)
+        "yellow" -> CheckRow("Bootloader", tx.bootCustom, Status.WARN, tx.bootCustomValue)
+        else -> CheckRow("Bootloader", tx.bootHidden, Status.INFO, tx.unknown)
     }
 
-    fun security(f: Facts): Section {
-        val boot = bootRow(f.bootState)
-        val root = if (f.rooted) CheckRow("Root", "Root traces found", Status.WARN, "Likely")
-        else CheckRow("Root", "No root traces", Status.OK, "No")
-        val dev = if (f.devOptions) CheckRow("Developer options", "Turn off if unused", Status.WARN, "On")
-        else CheckRow("Developer options", "Turned off", Status.OK, "Off")
-        val adb = if (f.adb) CheckRow("USB debugging", "Turn off if unused", Status.WARN, "On")
-        else CheckRow("USB debugging", "Turned off", Status.OK, "Off")
+    fun security(f: Facts, tx: Texts = En): Section {
+        val boot = bootRow(f.bootState, tx)
+        val root = if (f.rooted) CheckRow(tx.root, tx.rootFound, Status.WARN, tx.rootLikely)
+        else CheckRow(tx.root, tx.rootNone, Status.OK, tx.no)
+        val dev = if (f.devOptions) CheckRow(tx.devOptions, tx.turnOff, Status.WARN, tx.on)
+        else CheckRow(tx.devOptions, tx.turnedOff, Status.OK, tx.off)
+        val adb = if (f.adb) CheckRow(tx.usbDebugging, tx.turnOff, Status.WARN, tx.on)
+        else CheckRow(tx.usbDebugging, tx.turnedOff, Status.OK, tx.off)
         val rows = listOf(boot, root, dev, adb)
         val bootShort = when (boot.status) {
-            Status.OK -> "Bootloader locked"
-            Status.WARN -> "Bootloader unlocked"
-            else -> "Bootloader unknown"
+            Status.OK -> tx.bootShortLocked
+            Status.WARN -> tx.bootShortUnlocked
+            else -> tx.bootShortUnknown
         }
-        val summary = "$bootShort · " + if (f.rooted) "rooted" else "not rooted"
+        val summary = "$bootShort · " + if (f.rooted) tx.rooted else tx.notRooted
         val status = if (rows.any { it.status == Status.WARN }) Status.WARN else Status.OK
-        return Section(Kind.SECURITY, "Other security", summary, status, rows)
+        return Section(Kind.SECURITY, tx.securityTitle, summary, status, rows)
     }
 }

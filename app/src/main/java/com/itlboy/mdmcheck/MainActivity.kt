@@ -58,6 +58,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
+/** UI strings follow the phone language (see [Texts]). */
+private val tx: Texts get() = Texts.current()
+
 private val Bg = Color(0xFFF4F6F9)
 private val Ink = Color(0xFF111827)
 private val Muted = Color(0xFF4B5563)
@@ -143,7 +146,7 @@ private fun Header(onBack: (() -> Unit)? = null) {
     Box(Modifier.fillMaxWidth()) {
         if (onBack != null) {
             IconButton(onClick = onBack, modifier = Modifier.align(Alignment.CenterStart)) {
-                Icon(Ic.back, contentDescription = "Back", tint = Ink, modifier = Modifier.size(26.dp))
+                Icon(Ic.back, contentDescription = tx.back, tint = Ink, modifier = Modifier.size(26.dp))
             }
         }
         Text(
@@ -155,7 +158,7 @@ private fun Header(onBack: (() -> Unit)? = null) {
 
 @Composable
 private fun DeviceLine(d: DeviceSummary) {
-    val text = d.name + (d.setup?.let { " · Set up ${Rules.fmtDate(it)}" } ?: "")
+    val text = d.name + (d.setup?.let { " · " + tx.lineSetup(Rules.fmtDate(it, tx)) } ?: "")
     Text(text, Modifier.padding(top = 8.dp), fontSize = 16.sp, color = Muted, textAlign = TextAlign.Center)
 }
 
@@ -177,11 +180,11 @@ private fun HomeScreen(d: DeviceSummary, v: VersionState, running: Boolean, onCh
                 color = Ink, textAlign = TextAlign.Center)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    d.setup?.let { "Setup date " + Rules.fmtDate(it) } ?: "Setup date unknown",
+                    d.setup?.let { tx.homeSetup(Rules.fmtDate(it, tx)) } ?: tx.homeSetupUnknown,
                     fontSize = 16.sp, color = Muted,
                 )
                 IconButton(onClick = { info = true }) {
-                    Icon(Ic.info, contentDescription = "What is the setup date?", tint = Blue,
+                    Icon(Ic.info, contentDescription = tx.infoTitle, tint = Blue,
                         modifier = Modifier.size(20.dp))
                 }
             }
@@ -196,16 +199,16 @@ private fun HomeScreen(d: DeviceSummary, v: VersionState, running: Boolean, onCh
                 Modifier.padding(horizontal = 24.dp).padding(bottom = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                Text("What is the setup date?", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = Ink)
+                Text(tx.infoTitle, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = Ink)
                 Text(
-                    "The day this phone was last set up: its first boot as a new phone, or its most recent factory reset.",
+                    tx.infoBody1,
                     fontSize = 17.sp, lineHeight = 25.sp, color = Color(0xFF374151),
                 )
                 Text(
-                    "If it is much earlier than the day you bought it, the phone has probably been used before.",
+                    tx.infoBody2,
                     fontSize = 17.sp, lineHeight = 25.sp, color = Color(0xFF374151),
                 )
-                PrimaryButton("Got it") { info = false }
+                PrimaryButton(tx.gotIt) { info = false }
             }
         }
     }
@@ -228,7 +231,7 @@ private fun BigButton(running: Boolean, onClick: () -> Unit) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Ic.shieldCheck, contentDescription = null, tint = Color.White, modifier = Modifier.size(56.dp))
                     Spacer(Modifier.height(12.dp))
-                    Text("Check", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
+                    Text(tx.check, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
                 }
             }
         }
@@ -285,7 +288,7 @@ private fun ResultScreen(d: DeviceSummary, v: VersionState, r: Report, onOpen: (
             }
         }
         Spacer(Modifier.weight(1f))
-        PrimaryButton("Check again", onAgain)
+        PrimaryButton(tx.checkAgain, onAgain)
     }
 }
 
@@ -298,10 +301,10 @@ private fun VersionPill(v: VersionState) {
     val newer = v.latest != null && Rules.isNewer(v.current, v.latest.version)
     val (dot, text) = when {
         // Kept short so the pill always fits on one line.
-        !v.checked -> Faint to "v${v.current} · Checking…"
-        v.latest == null -> Faint to "v${v.current} · Offline"
-        newer -> Bad.solid to "v${v.current} · Update to ${v.latest?.version}"
-        else -> Good.solid to "v${v.current} · Up to date"
+        !v.checked -> Faint to tx.pillChecking(v.current)
+        v.latest == null -> Faint to tx.pillOffline(v.current)
+        newer -> Bad.solid to tx.pillUpdate(v.current, v.latest?.version.orEmpty())
+        else -> Good.solid to tx.pillUpToDate(v.current)
     }
     val base = Modifier.clip(RoundedCornerShape(50)).background(Color.White)
     val mod = if (newer) base.clickable(role = Role.Button) { uri.openUri(v.latest!!.url) } else base
@@ -385,7 +388,7 @@ private fun DetailScreen(d: DeviceSummary, s: Section, onBack: () -> Unit) {
         Spacer(Modifier.weight(1f))
         if (s.kind == Kind.MDM) {
             Text(
-                "Can't detect IMEI-based MDM (zero-touch). To be sure: factory reset, then set up on Wi‑Fi.",
+                tx.zeroTouchNote,
                 Modifier.padding(horizontal = 8.dp),
                 fontSize = 14.sp, lineHeight = 20.sp, color = Muted, textAlign = TextAlign.Center,
             )
@@ -415,7 +418,7 @@ private fun DetailRow(row: CheckRow) {
             ) {
                 Icon(
                     when (row.status) { Status.OK -> Ic.check; Status.BAD -> Ic.x; else -> Ic.alert },
-                    contentDescription = when (row.status) { Status.OK -> "Clear"; Status.BAD -> "Issue"; else -> "Review" },
+                    contentDescription = when (row.status) { Status.OK -> tx.badgeClear; Status.BAD -> tx.badgeIssue; else -> tx.badgeReview },
                     tint = t.fg, modifier = Modifier.size(16.dp),
                 )
             }

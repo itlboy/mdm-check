@@ -15,6 +15,9 @@ or phones in bulk.
 | Device history | Setup date (first boot or last factory reset), OS build date, uptime |
 | Other security | Bootloader, root, developer options, USB debugging |
 
+The app follows the phone language: Vietnamese on Vietnamese phones, English everywhere else.
+All user-visible text lives in `Texts.kt`.
+
 The app only goes online to ask GitHub for the latest version (green/red dot at the bottom).
 Check results never leave the device.
 

@@ -23,7 +23,7 @@ object Collector {
         "com.hexnode.hexnodemdm" to "Hexnode MDM",
         "com.promobitech.mobilock.pro" to "Scalefusion",
         "com.sophos.mobilecontrol.client.android" to "Sophos Mobile",
-        "com.payjoy.access" to "PayJoy (payment lock)",
+        "com.payjoy.access" to "PayJoy",
     )
 
     private val SU_PATHS = listOf(
@@ -31,12 +31,12 @@ object Collector {
         "/data/adb/magisk", "/data/local/bin/su", "/data/local/xbin/su",
     )
 
-    /** Restrictions MDM commonly applies; the value is the text shown to the user. */
+    /** Restrictions MDM commonly applies. Stored as keys; [Texts.restriction] turns them into words. */
     private val RESTRICTIONS = listOf(
-        UserManager.DISALLOW_FACTORY_RESET to "factory reset",
-        UserManager.DISALLOW_UNINSTALL_APPS to "uninstalling apps",
-        UserManager.DISALLOW_DEBUGGING_FEATURES to "USB debugging",
-        UserManager.DISALLOW_USB_FILE_TRANSFER to "USB file transfer",
+        UserManager.DISALLOW_FACTORY_RESET,
+        UserManager.DISALLOW_UNINSTALL_APPS,
+        UserManager.DISALLOW_DEBUGGING_FEATURES,
+        UserManager.DISALLOW_USB_FILE_TRANSFER,
     )
 
     /** Marketing name the manufacturer stores in system properties (Xiaomi, OPPO/realme/OnePlus, Huawei…). */
@@ -130,8 +130,7 @@ object Collector {
             profiles = runCatching { um.userProfiles.size }.getOrDefault(1),
             workProfiles = workProfiles(ctx, um),
             knownApps = KNOWN.keys.filter { installed(pm, it) }.map { KNOWN.getValue(it) }.distinct(),
-            blocked = RESTRICTIONS.filter { runCatching { um.hasUserRestriction(it.first) }.getOrDefault(false) }
-                .map { it.second },
+            blocked = RESTRICTIONS.filter { runCatching { um.hasUserRestriction(it) }.getOrDefault(false) },
             bootState = prop("ro.boot.verifiedbootstate"),
             rooted = SU_PATHS.any { runCatching { File(it).exists() }.getOrDefault(false) },
             devOptions = global(Settings.Global.DEVELOPMENT_SETTINGS_ENABLED),
@@ -139,7 +138,7 @@ object Collector {
         )
     }
 
-    fun run(ctx: Context): Report = Rules.report(collect(ctx))
+    fun run(ctx: Context, t: Texts = Texts.current()): Report = Rules.report(collect(ctx), t)
 
     private fun label(pm: PackageManager, pkg: String): String =
         KNOWN[pkg] ?: runCatching { pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)

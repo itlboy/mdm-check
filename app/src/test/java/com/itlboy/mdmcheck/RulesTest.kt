@@ -91,18 +91,18 @@ class RulesTest {
     }
 
     @Test fun knownApp_isManaged() {
-        val f = clean.copy(knownApps = listOf("PayJoy (payment lock)"))
+        val f = clean.copy(knownApps = listOf("PayJoy"))
         assertEquals(Status.BAD, mdmRow(f, "MDM / payment-lock apps").status)
     }
 
     @Test fun blockedFeatures_isManaged() {
-        val row = mdmRow(clean.copy(blocked = listOf("factory reset", "uninstalling apps")), "Blocked features")
+        val row = mdmRow(clean.copy(blocked = listOf("no_factory_reset", "no_uninstall_apps")), "Blocked features")
         assertEquals(Status.BAD, row.status)
         assertEquals("Blocked: factory reset, uninstalling apps", row.detail)
     }
 
     @Test fun badBeatsWarn_andCountsAll() {
-        val r = Rules.report(clean.copy(deviceOwner = "X", blocked = listOf("uninstalling apps"), profiles = 3, workProfiles = -1))
+        val r = Rules.report(clean.copy(deviceOwner = "X", blocked = listOf("no_uninstall_apps"), profiles = 3, workProfiles = -1))
         assertEquals(Status.BAD, r.status)
         assertEquals("2/5 with issues", r.sections[0].summary)
     }
@@ -174,7 +174,7 @@ class RulesTest {
 
     @Test fun formatting() {
         val utc = TimeZone.getTimeZone("UTC")
-        assertEquals("1 Jan 2026", Rules.fmtDate(1_767_225_600_000L, utc))
+        assertEquals("1 Jan 2026", Rules.fmtDate(1_767_225_600_000L, En, utc))
         assertEquals("today", Rules.agoText(now - 1_000L, now))
         assertEquals("today", Rules.agoText(now + day, now))
         assertEquals("1 day ago", Rules.agoText(now - day, now))
