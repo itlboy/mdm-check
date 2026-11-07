@@ -143,6 +143,8 @@ jobs:
         if: steps.ver.outputs.skip != 'true'
         run: |
           cp app/build/outputs/apk/release/app-release.apk "cozy-mdm-check-$APP_VERSION.apk"
-          gh release create "v$APP_VERSION" "cozy-mdm-check-$APP_VERSION.apk" \
+          # Same APK under a fixed name: /releases/latest/download/cozy-mdm-check.apk always works.
+          cp app/build/outputs/apk/release/app-release.apk cozy-mdm-check.apk
+          gh release create "v$APP_VERSION" "cozy-mdm-check-$APP_VERSION.apk" cozy-mdm-check.apk \
             --title "Cozy MDM Check $APP_VERSION" \
             --notes "Test build from commit ${GITHUB_SHA::7}. Download the .apk below on an Android phone and open it to install."

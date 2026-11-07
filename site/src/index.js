@@ -1,12 +1,16 @@
 // mdm-check.cozypi.com — download page for the Cozy MDM Check Android app.
 // The latest release is read from GitHub (cached 5 min), so publishing a new APK needs no redeploy.
 //   /            landing page (Vietnamese or English from Accept-Language, ?lang=vi|en overrides)
-//   /download    302 to the newest .apk
+//   /download    the newest .apk, served as an attachment from this domain
 //   /latest.json { version, date, size, url } for scripts and the app
 
 const REPO = "itlboy/mdm-check";
 const RELEASES = `https://github.com/${REPO}/releases/latest`;
 const CACHE_SECONDS = 300;
+// Every release also carries the APK under this fixed name, so GitHub's own
+// /releases/latest/download/<name> works even when the API is unavailable.
+const FIXED_NAME = "cozy-mdm-check.apk";
+const FIXED_URL = `https://github.com/${REPO}/releases/latest/download/${FIXED_NAME}`;
 
 export default {
   async fetch(request, env, ctx) {
@@ -16,8 +20,22 @@ export default {
     }
 
     if (url.pathname === "/download") {
+      // Serve the APK from our own domain as an attachment, so tapping the button downloads
+      // straight away instead of bouncing through github.com. Falls back to a redirect.
       const rel = await latest(ctx);
-      return Response.redirect(rel?.url || RELEASES, 302);
+      const src = rel?.url || FIXED_URL;
+      const r = await fetch(src, { cf: { cacheEverything: true, cacheTtl: 86400 } });
+      if (!r.ok || !r.body) return Response.redirect(rel?.url || RELEASES, 302);
+      const name = decodeURIComponent(src.split("/").pop() || "cozy-mdm-check.apk").replace(/[^\w.-]/g, "");
+      const headers = new Headers({
+        "Content-Type": "application/vnd.android.package-archive",
+        "Content-Disposition": `attachment; filename="${name}"`,
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+      });
+      const len = r.headers.get("Content-Length");
+      if (len) headers.set("Content-Length", len);
+      return new Response(request.method === "HEAD" ? null : r.body, { headers });
     }
     if (url.pathname === "/latest.json") {
       const rel = await latest(ctx);
@@ -53,31 +71,39 @@ export default {
 /** Latest release info, cached at the edge. Returns null if GitHub is unreachable. */
 async function latest(ctx) {
   const cache = caches.default;
-  const key = new Request("https://mdm-check.cozypi.com/__cache/latest");
-  const hit = await cache.match(key);
+  const fresh = new Request("https://mdm-check.cozypi.com/__cache/latest");
+  const stale = new Request("https://mdm-check.cozypi.com/__cache/latest-stale");
+  const hit = await cache.match(fresh);
   if (hit) return hit.json();
 
+  // Unauthenticated GitHub API: ~60 calls/hour per IP, and Cloudflare egress IPs are shared.
+  // On any failure, fall back to the last good answer (kept 30 days).
+  const fallback = async () => {
+    const old = await cache.match(stale);
+    return old ? old.json() : null;
+  };
   try {
     const r = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
       headers: { Accept: "application/vnd.github+json", "User-Agent": "cozy-mdm-check-site" },
     });
-    if (!r.ok) return null;
+    if (!r.ok) return fallback();
     const j = await r.json();
-    const apk = (j.assets || []).find((a) => a.name.endsWith(".apk"));
-    if (!apk) return null;
+    const apks = (j.assets || []).filter((a) => a.name.endsWith(".apk"));
+    const apk = apks.find((a) => a.name !== FIXED_NAME) || apks[0];
+    if (!apk) return fallback();
     const data = {
       version: String(j.tag_name || "").replace(/^v/i, ""),
       date: j.published_at,
       size: apk.size,
       url: apk.browser_download_url,
     };
-    const res = new Response(JSON.stringify(data), {
-      headers: { "Content-Type": "application/json", "Cache-Control": `public, max-age=${CACHE_SECONDS}` },
-    });
-    ctx.waitUntil(cache.put(key, res));
+    const body = JSON.stringify(data);
+    const put = (req, seconds) =>
+      cache.put(req, new Response(body, { headers: { "Content-Type": "application/json", "Cache-Control": `public, max-age=${seconds}` } }));
+    ctx.waitUntil(Promise.all([put(fresh, CACHE_SECONDS), put(stale, 30 * 86400)]));
     return data;
   } catch {
-    return null;
+    return fallback();
   }
 }
 
@@ -111,10 +137,8 @@ const T = {
   vi: {
     title: "Cozy MDM Check — kiểm tra máy Android có bị MDM",
     desc: "Bấm một nút để biết điện thoại Android có bị MDM, hồ sơ công việc hay khoá trả góp không. Miễn phí, chạy ngay trên máy.",
-    tagline: "Bấm một nút để biết điện thoại có bị <b>MDM</b>, <b>hồ sơ công việc</b> hay <b>khoá trả góp</b> không.",
     download: "Tải APK",
     version: "Phiên bản",
-    unavailable: "Xem các bản phát hành",
     req: "Android 8 trở lên",
     whatTitle: "Kiểm tra những gì",
     features: [
@@ -138,10 +162,8 @@ const T = {
   en: {
     title: "Cozy MDM Check — is this Android phone under MDM?",
     desc: "Tap one button to see whether an Android phone is under MDM, has a work profile or a payment lock. Free, runs on the phone.",
-    tagline: "Tap one button to see whether a phone is under <b>MDM</b>, has a <b>work profile</b> or a <b>payment lock</b>.",
     download: "Download APK",
     version: "Version",
-    unavailable: "See all releases",
     req: "Android 8+",
     whatTitle: "What it checks",
     features: [
@@ -185,9 +207,9 @@ function page(lang, rel) {
   const meta = rel
     ? [`${t.version} ${esc(rel.version)}`, fmtSize(rel.size, lang), t.req, fmtDate(rel.date, lang)].filter(Boolean).join(" · ")
     : t.req;
-  const button = rel
-    ? `<a class="btn" href="/download">${svg("download", 22)}<span>${t.download}</span></a>`
-    : `<a class="btn" href="${RELEASES}">${svg("download", 22)}<span>${t.unavailable}</span></a>`;
+  // /download works even without release info (fixed-name fallback), so the button always downloads.
+  const file = rel ? `cozy-mdm-check-${esc(rel.version)}.apk` : FIXED_NAME;
+  const button = `<a class="btn" href="/download" download="${file}" type="application/vnd.android.package-archive">${svg("download", 22)}<span>${t.download}</span></a>`;
 
   const features = t.features
     .map(([icon, title, text]) => {
@@ -240,8 +262,6 @@ header.top{display:flex;align-items:center;justify-content:space-between;padding
 .hero{text-align:center;padding:28px 0 8px}
 .hero .icon{width:96px;height:96px;border-radius:26px;box-shadow:0 0 0 12px rgba(37,99,235,.12),0 14px 30px rgba(37,99,235,.28)}
 h1{font-size:clamp(32px,8vw,44px);line-height:1.1;letter-spacing:-.02em;margin:28px 0 12px;font-weight:800}
-.tag{font-size:18px;color:var(--muted);margin:0 auto;max-width:30ch}
-.tag b{color:var(--ink);font-weight:600}
 .btn{display:flex;align-items:center;justify-content:center;gap:10px;margin:28px auto 0;max-width:360px;min-height:60px;border-radius:18px;background:var(--blue);color:#fff;font-size:19px;font-weight:700;text-decoration:none;box-shadow:0 10px 24px rgba(37,99,235,.3);transition:background .15s,transform .15s}
 .btn:hover{background:var(--blue-d)}
 .btn:active{transform:scale(.98)}
@@ -282,7 +302,6 @@ footer .by{margin-top:8px}
   <div class="hero">
     <img class="icon" src="/icon.svg" alt="Cozy MDM Check" width="96" height="96">
     <h1>Cozy MDM Check</h1>
-    <p class="tag">${t.tagline}</p>
     ${button}
     <p class="meta">${meta}</p>
     <p class="updates"><span class="dot"></span>${t.updates}</p>
