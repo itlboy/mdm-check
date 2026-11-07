@@ -158,8 +158,12 @@ private fun Header(onBack: (() -> Unit)? = null) {
 
 @Composable
 private fun DeviceLine(d: DeviceSummary) {
-    val text = d.name + (d.setup?.let { " · " + tx.lineSetup(Rules.fmtDate(it, tx)) } ?: "")
-    Text(text, Modifier.padding(top = 8.dp), fontSize = 16.sp, color = Muted, textAlign = TextAlign.Center)
+    // Two fixed lines (name, then setup date) so long names never wrap mid-phrase.
+    Text(d.name, Modifier.padding(top = 8.dp), fontSize = 16.sp, color = Muted, textAlign = TextAlign.Center,
+        maxLines = 1, overflow = TextOverflow.Ellipsis)
+    d.setup?.let {
+        Text(tx.lineSetup(Rules.fmtDate(it, tx)), fontSize = 15.sp, color = Muted, textAlign = TextAlign.Center, maxLines = 1)
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

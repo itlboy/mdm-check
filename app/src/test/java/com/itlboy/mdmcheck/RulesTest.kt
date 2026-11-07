@@ -111,7 +111,7 @@ class RulesTest {
         val r = Rules.report(clean.copy(rooted = true, adb = true, devOptions = true, bootState = "orange"))
         assertEquals(Status.OK, r.status)
         assertEquals(Status.WARN, r.sections[3].status)
-        assertEquals("Bootloader unlocked · rooted", r.sections[3].summary)
+        assertEquals("4 items to review", r.sections[3].summary)
     }
 
     // ---- Security ----
@@ -121,15 +121,17 @@ class RulesTest {
         assertEquals(Status.WARN, Rules.bootRow("orange").status)
         assertEquals(Status.WARN, Rules.bootRow("yellow").status)
         assertEquals(Status.INFO, Rules.bootRow("").status)
-        assertEquals("Bootloader locked · not rooted", Rules.security(clean).summary)
-        assertEquals("Bootloader unknown · not rooted", Rules.security(clean.copy(bootState = "")).summary)
+        assertEquals("No risks found", Rules.security(clean).summary)
+        // Unknown bootloader state is not a risk on its own.
+        assertEquals("No risks found", Rules.security(clean.copy(bootState = "")).summary)
+        assertEquals("1 item to review", Rules.security(clean.copy(adb = true)).summary)
     }
 
     // ---- Device info / history ----
 
     @Test fun deviceSection() {
         val s = Rules.device(clean)
-        assertEquals("OPPO Find X9 Ultra · Android 16", s.summary)
+        assertEquals("Android 16", s.summary)
         assertEquals("1 Oct 2026", s.rows.first { it.name == "Security patch" }.value)
     }
 

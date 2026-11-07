@@ -175,7 +175,7 @@ object Rules {
             CheckRow(tx.patch, tx.patchDetail, value = formatPatch(f.securityPatch, tx)),
             CheckRow(tx.build, f.display),
         )
-        return Section(Kind.DEVICE, tx.deviceTitle, "${f.deviceName} · Android ${f.release}", Status.INFO, rows)
+        return Section(Kind.DEVICE, tx.deviceTitle, "Android ${f.release}", Status.INFO, rows)
     }
 
     fun history(f: Facts, tx: Texts = En): Section {
@@ -206,13 +206,10 @@ object Rules {
         val adb = if (f.adb) CheckRow(tx.usbDebugging, tx.turnOff, Status.WARN, tx.on)
         else CheckRow(tx.usbDebugging, tx.turnedOff, Status.OK, tx.off)
         val rows = listOf(boot, root, dev, adb)
-        val bootShort = when (boot.status) {
-            Status.OK -> tx.bootShortLocked
-            Status.WARN -> tx.bootShortUnlocked
-            else -> tx.bootShortUnknown
-        }
-        val summary = "$bootShort · " + if (f.rooted) tx.rooted else tx.notRooted
-        val status = if (rows.any { it.status == Status.WARN }) Status.WARN else Status.OK
+        // Short on purpose: the menu shows it on one line.
+        val warn = rows.count { it.status == Status.WARN }
+        val summary = if (warn == 0) tx.securityOk else tx.toReview(warn)
+        val status = if (warn > 0) Status.WARN else Status.OK
         return Section(Kind.SECURITY, tx.securityTitle, summary, status, rows)
     }
 }

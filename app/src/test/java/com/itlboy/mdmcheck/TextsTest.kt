@@ -36,7 +36,8 @@ class TextsTest {
         assertEquals("5/5 mục sạch", r.sections[0].summary)
         assertEquals("Thiết lập 2 ngày trước", r.sections[2].summary)
         assertEquals("2 ngày 3 giờ", r.sections[2].rows.last().value)
-        assertEquals("Bootloader khoá · không root", r.sections[3].summary)
+        assertEquals("Không thấy rủi ro", r.sections[3].summary)
+        assertEquals("Android 11", r.sections[1].summary)
         // Dual Apps on MIUI must read as clean, in Vietnamese too.
         assertEquals("Không có. Hồ sơ phụ là Ứng dụng kép / Không gian thứ hai", r.sections[0].rows[2].detail)
     }

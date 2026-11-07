@@ -82,16 +82,13 @@ interface Texts {
     val bootCustom: String
     val bootCustomValue: String
     val bootHidden: String
-    val bootShortLocked: String
-    val bootShortUnlocked: String
-    val bootShortUnknown: String
+    val securityOk: String
+    fun toReview(n: Int): String
     val root: String
     val rootFound: String
     val rootLikely: String
     val rootNone: String
     val no: String
-    val rooted: String
-    val notRooted: String
     val devOptions: String
     val usbDebugging: String
     val turnOff: String
@@ -105,7 +102,6 @@ interface Texts {
     val back: String
     fun homeSetup(date: String): String
     val homeSetupUnknown: String
-    fun lineSetup(date: String): String
     val infoTitle: String
     val infoBody1: String
     val infoBody2: String
@@ -200,16 +196,13 @@ object En : Texts {
     override val bootCustom = "Signed with a custom key"
     override val bootCustomValue = "Custom key"
     override val bootHidden = "Device doesn't expose this"
-    override val bootShortLocked = "Bootloader locked"
-    override val bootShortUnlocked = "Bootloader unlocked"
-    override val bootShortUnknown = "Bootloader unknown"
+    override val securityOk = "No risks found"
+    override fun toReview(n: Int) = "${items(n)} to review"
     override val root = "Root"
     override val rootFound = "Root traces found"
     override val rootLikely = "Likely"
     override val rootNone = "No root traces"
     override val no = "No"
-    override val rooted = "rooted"
-    override val notRooted = "not rooted"
     override val devOptions = "Developer options"
     override val usbDebugging = "USB debugging"
     override val turnOff = "Turn off if unused"
@@ -222,7 +215,6 @@ object En : Texts {
     override val back = "Back"
     override fun homeSetup(date: String) = "Setup date $date"
     override val homeSetupUnknown = "Setup date unknown"
-    override fun lineSetup(date: String) = "Set up $date"
     override val infoTitle = "What is the setup date?"
     override val infoBody1 = "The day this phone was last set up: its first boot as a new phone, or its most recent factory reset."
     override val infoBody2 = "If it is much earlier than the day you bought it, the phone has probably been used before."
@@ -312,16 +304,13 @@ object Vi : Texts {
     override val bootCustom = "Đang dùng khoá ký riêng"
     override val bootCustomValue = "Khoá riêng"
     override val bootHidden = "Máy không cho đọc trạng thái"
-    override val bootShortLocked = "Bootloader khoá"
-    override val bootShortUnlocked = "Bootloader mở"
-    override val bootShortUnknown = "Bootloader không rõ"
+    override val securityOk = "Không thấy rủi ro"
+    override fun toReview(n: Int) = "$n mục nên xem"
     override val root = "Root"
     override val rootFound = "Có dấu vết root trên máy"
     override val rootLikely = "Có dấu hiệu"
     override val rootNone = "Không tìm thấy dấu vết root"
     override val no = "Không"
-    override val rooted = "có root"
-    override val notRooted = "không root"
     override val devOptions = "Tuỳ chọn nhà phát triển"
     override val usbDebugging = "Gỡ lỗi USB"
     override val turnOff = "Nên tắt nếu không dùng"
@@ -334,7 +323,6 @@ object Vi : Texts {
     override val back = "Quay lại"
     override fun homeSetup(date: String) = "Thiết lập máy $date"
     override val homeSetupUnknown = "Thiết lập máy không rõ"
-    override fun lineSetup(date: String) = "Thiết lập $date"
     override val infoTitle = "Thiết lập máy là gì?"
     override val infoBody1 = "Là ngày máy được cài đặt lần gần nhất: lần đầu bật máy mới, hoặc lần khôi phục cài đặt gốc gần nhất."
     override val infoBody2 = "Nếu ngày này sớm hơn nhiều so với ngày bạn mua, máy có thể đã qua tay người khác."
