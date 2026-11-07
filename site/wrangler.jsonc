@@ -6,5 +6,7 @@
   // Custom domain: takes precedence over the *.cozypi.com wildcard that points at the tunnel.
   "routes": [{ "pattern": "mdm-check.cozypi.com", "custom_domain": true }],
   "workers_dev": false,
+  // PNG share images are bundled into the Worker as ArrayBuffers (`import x from "./assets/x.png"`).
+  "rules": [{ "type": "Data", "globs": ["**/*.png"], "fallthrough": true }],
   "observability": { "enabled": true }
 }

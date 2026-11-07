@@ -3,7 +3,15 @@
 //   /            landing page (Vietnamese or English from Accept-Language, ?lang=vi|en overrides)
 //   /download    the newest .apk, served as an attachment from this domain
 //   /latest.json { version, date, size, url } for scripts and the app
+//   /og-vi.png /og-en.png /apple-touch-icon.png /icon.svg   share images and icons
+//   /robots.txt /sitemap.xml                                 SEO
+// Share images are rebuilt from site/og-src/*.html (render at 1200×630, icon at 180×180).
 
+import OG_VI from "./assets/og-vi.png";
+import OG_EN from "./assets/og-en.png";
+import ICON_180 from "./assets/icon-180.png";
+
+const ORIGIN = "https://mdm-check.cozypi.com";
 const REPO = "itlboy/mdm-check";
 const RELEASES = `https://github.com/${REPO}/releases/latest`;
 const CACHE_SECONDS = 300;
@@ -49,6 +57,23 @@ export default {
         headers: { "Content-Type": "image/svg+xml", "Cache-Control": "public, max-age=86400" },
       });
     }
+    const png = { "/og-vi.png": OG_VI, "/og-en.png": OG_EN, "/apple-touch-icon.png": ICON_180 }[url.pathname];
+    if (png) {
+      return new Response(png, {
+        headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=604800" },
+      });
+    }
+    if (url.pathname === "/robots.txt") {
+      return new Response(`User-agent: *\nAllow: /\nDisallow: /download\n\nSitemap: ${ORIGIN}/sitemap.xml\n`, {
+        headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=86400" },
+      });
+    }
+    if (url.pathname === "/sitemap.xml") {
+      return new Response(sitemap(), {
+        headers: { "Content-Type": "application/xml; charset=utf-8", "Cache-Control": "public, max-age=86400" },
+      });
+    }
+    // Everything else (old links, typos) lands on the home page.
     if (url.pathname !== "/") {
       return Response.redirect(new URL("/", url).toString(), 301);
     }
@@ -107,6 +132,17 @@ async function latest(ctx) {
   }
 }
 
+function sitemap() {
+  const alt = ["vi", "en"]
+    .map((l) => `    <xhtml:link rel="alternate" hreflang="${l}" href="${ORIGIN}/?lang=${l}"/>`)
+    .concat(`    <xhtml:link rel="alternate" hreflang="x-default" href="${ORIGIN}/"/>`)
+    .join("\n");
+  const urls = ["vi", "en"]
+    .map((l) => `  <url>\n    <loc>${ORIGIN}/?lang=${l}</loc>\n${alt}\n  </url>`)
+    .join("\n");
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n${urls}\n</urlset>\n`;
+}
+
 function pickLang(url, request) {
   const q = url.searchParams.get("lang");
   if (q === "vi" || q === "en") return q;
@@ -137,6 +173,7 @@ const T = {
   vi: {
     title: "Cozy MDM Check — kiểm tra máy Android có bị MDM",
     desc: "Bấm một nút để biết điện thoại Android có bị MDM, hồ sơ công việc hay khoá trả góp không. Miễn phí, chạy ngay trên máy.",
+    ogAlt: "Cozy MDM Check — Máy Android này có bị quản lý không? MDM, hồ sơ công việc, khoá trả góp.",
     download: "Tải APK",
     version: "Phiên bản",
     req: "Android 8 trở lên",
@@ -162,6 +199,7 @@ const T = {
   en: {
     title: "Cozy MDM Check — is this Android phone under MDM?",
     desc: "Tap one button to see whether an Android phone is under MDM, has a work profile or a payment lock. Free, runs on the phone.",
+    ogAlt: "Cozy MDM Check — Is this Android phone being managed? MDM, work profile, payment lock.",
     download: "Download APK",
     version: "Version",
     req: "Android 8+",
@@ -219,6 +257,27 @@ function page(lang, rel) {
     .join("");
   const steps = t.steps.map(([title, text], i) => `<li><span class="num">${i + 1}</span><div><h3>${title}</h3><p>${text}</p></div></li>`).join("");
 
+  // SEO / share cards. Canonical is the explicit-language URL; "/" alone varies by Accept-Language.
+  const pageUrl = `${ORIGIN}/?lang=${lang}`;
+  const ogImage = `${ORIGIN}/og-${lang}.png`;
+  const ld = {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: "Cozy MDM Check",
+    description: t.desc,
+    url: pageUrl,
+    image: ogImage,
+    operatingSystem: "Android",
+    applicationCategory: "UtilitiesApplication",
+    inLanguage: lang,
+    offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+    publisher: { "@type": "Organization", name: "Cozy Pi", url: "https://cozypi.com" },
+    downloadUrl: `${ORIGIN}/download`,
+    ...(rel ? { softwareVersion: rel.version, datePublished: rel.date, fileSize: fmtSize(rel.size, "en") } : {}),
+  };
+  // "</" can't appear inside the script tag.
+  const jsonLd = JSON.stringify(ld).replace(/</g, "\\u003c");
+
   return `<!doctype html>
 <html lang="${lang}">
 <head>
@@ -227,14 +286,30 @@ function page(lang, rel) {
 <title>${t.title}</title>
 <meta name="description" content="${t.desc}">
 <meta name="theme-color" content="#F4F6F9">
-<meta property="og:title" content="Cozy MDM Check">
-<meta property="og:description" content="${t.desc}">
+<link rel="canonical" href="${pageUrl}">
+<link rel="alternate" hreflang="vi" href="${ORIGIN}/?lang=vi">
+<link rel="alternate" hreflang="en" href="${ORIGIN}/?lang=en">
+<link rel="alternate" hreflang="x-default" href="${ORIGIN}/">
 <meta property="og:type" content="website">
-<meta property="og:url" content="https://mdm-check.cozypi.com/">
+<meta property="og:site_name" content="Cozy MDM Check">
+<meta property="og:title" content="${t.title}">
+<meta property="og:description" content="${t.desc}">
+<meta property="og:url" content="${pageUrl}">
+<meta property="og:image" content="${ogImage}">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="${t.ogAlt}">
+<meta property="og:locale" content="${lang === "vi" ? "vi_VN" : "en_US"}">
+<meta property="og:locale:alternate" content="${lang === "vi" ? "en_US" : "vi_VN"}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${t.title}">
+<meta name="twitter:description" content="${t.desc}">
+<meta name="twitter:image" content="${ogImage}">
+<meta name="twitter:image:alt" content="${t.ogAlt}">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="/icon.svg">
-<link rel="alternate" hreflang="vi" href="https://mdm-check.cozypi.com/?lang=vi">
-<link rel="alternate" hreflang="en" href="https://mdm-check.cozypi.com/?lang=en">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<script type="application/ld+json">${jsonLd}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
