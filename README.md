@@ -1,44 +1,47 @@
 # Cozy MDM Check
 
-App Android nhỏ: bấm một nút để biết máy có đang bị **MDM** (quản lý thiết bị của công ty),
-**hồ sơ công việc** hay **khoá trả góp** không. Hữu ích khi mua máy cũ hoặc mua theo lô.
+A small Android app: tap one button to see whether the phone is under **MDM** (company device
+management), has a **work profile**, or carries a **payment lock**. Handy when buying used phones
+or phones in bulk.
 
-**Tải APK:** [Releases mới nhất](https://github.com/itlboy/mdm-check/releases/latest)
+**Download the APK:** [latest release](https://github.com/itlboy/mdm-check/releases/latest)
 
-## App kiểm tra gì
+## What it checks
 
-| Nhóm | Nội dung |
+| Section | Contents |
 |---|---|
-| Dấu hiệu quản lý | App quản trị thiết bị (bỏ qua app hệ thống như Tìm thiết bị), máy do tổ chức quản lý (device owner), hồ sơ công việc, app MDM/khoá trả góp phổ biến, tính năng bị chặn (reset, gỡ app, USB) |
-| Thông tin máy | Tên máy, mã model, Android, bản vá bảo mật, bản phần mềm |
-| Lịch sử máy | Ngày thiết lập máy (lần đầu bật hoặc lần reset gần nhất), ngày build phần mềm, thời gian chạy liên tục |
-| Bảo mật khác | Bootloader, root, tuỳ chọn nhà phát triển, gỡ lỗi USB |
+| Management signs | Device admin apps (system apps such as Find My Device are ignored), organization-owned device (device owner), work profile, common MDM / payment-lock apps, blocked features (reset, uninstall, USB) |
+| Device info | Name, model, Android version, security patch, build |
+| Device history | Setup date (first boot or last factory reset), OS build date, uptime |
+| Other security | Bootloader, root, developer options, USB debugging |
 
-App chỉ dùng mạng để hỏi GitHub phiên bản mới nhất (chấm xanh/đỏ ở cuối màn hình).
-Kết quả kiểm tra không gửi đi đâu.
+The app only goes online to ask GitHub for the latest version (green/red dot at the bottom).
+Check results never leave the device.
 
-## Giới hạn cần biết
+## Limitations
 
-- **Không thấy được zero-touch** (MDM gắn theo IMEI, chỉ kích hoạt khi máy được reset).
-  Muốn chắc chắn: khôi phục cài đặt gốc rồi thiết lập lại có Wi‑Fi.
-- **Không đọc được IMEI** — Android 10+ chặn app thường.
-- "Ngày thiết lập máy" là ước tính từ hệ thống, không phải ngày kích hoạt bảo hành của hãng.
-- Hồ sơ phụ có thể là "nhân bản ứng dụng" của ColorOS, nên chỉ báo vàng, không báo đỏ.
+- **Zero-touch is invisible** (MDM bound to the IMEI, only applied after a reset).
+  To be sure: factory reset, then set the phone up on Wi‑Fi.
+- **The IMEI cannot be read**: Android 10+ blocks regular apps from it.
+- The setup date is estimated from the system; it is not the manufacturer's warranty activation date.
+- Extra profiles from Dual Apps / Second Space (MIUI, ColorOS) are not treated as work profiles.
+  An extra profile whose type cannot be determined is shown in amber, never red.
 
-## Phát triển
+## Development
 
-Kotlin + Jetpack Compose, minSdk 26. Logic kết luận nằm trọn trong `Rules.kt` (hàm thuần, test trên JVM);
-`Checker.kt` (`Collector`) chỉ đọc dữ liệu từ máy.
+Kotlin + Jetpack Compose, minSdk 26. All verdict logic lives in `Rules.kt` (pure functions, tested on
+the JVM); `Checker.kt` (`Collector`) only reads data from the device.
 
 ```sh
-gradle testDebugUnitTest          # unit test cho Rules
-gradle connectedDebugAndroidTest  # test trên máy/giả lập đang cắm
-gradle assembleRelease            # APK ở app/build/outputs/apk/release/
+gradle testDebugUnitTest          # unit tests for Rules
+gradle connectedDebugAndroidTest  # tests on a connected device / emulator
+gradle assembleRelease            # APK in app/build/outputs/apk/release/
 ```
 
-CI (`.github/workflows/build.yml`): mỗi lần push lên `main` chạy unit test + test trên giả lập Android 14;
-qua hết thì build APK và tạo release `v1.0`, `v1.1`, … tự tăng.
+CI (`.github/workflows/build.yml`): every push to `main` runs the unit tests and the emulator tests
+(Android 14, Pixel 6 size). When both pass and the app changed since the last release, it builds the APK
+and publishes `v1.0`, `v1.1`, … automatically. CI-only or README-only changes do not publish a release.
 
-APK phát hành được ký bằng một khoá cố định (secret `SIGNING_KEYSTORE_B64` + `SIGNING_PASSWORD`,
-PKCS12, alias `mdmcheck`), nên bản mới cài đè được lên bản cũ. Mất khoá này thì người dùng phải gỡ app
-cũ mới cài được bản ký bằng khoá mới.
+Released APKs are signed with one fixed key (secrets `SIGNING_KEYSTORE_B64` + `SIGNING_PASSWORD`,
+PKCS12, alias `mdmcheck`), so new versions install over old ones. If that key is lost, users must
+uninstall the old app before installing one signed with a new key.

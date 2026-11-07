@@ -116,7 +116,7 @@ fun App() {
     LaunchedEffect(running) {
         if (running) {
             val r = withContext(Dispatchers.Default) { Collector.run(ctx) }
-            delay(500) // để người dùng thấy app có quét
+            delay(500) // let the user see that a scan happened
             report = r
             running = false
             screen = Screen.Result
@@ -143,7 +143,7 @@ private fun Header(onBack: (() -> Unit)? = null) {
     Box(Modifier.fillMaxWidth()) {
         if (onBack != null) {
             IconButton(onClick = onBack, modifier = Modifier.align(Alignment.CenterStart)) {
-                Icon(Ic.back, contentDescription = "Quay lại", tint = Ink, modifier = Modifier.size(26.dp))
+                Icon(Ic.back, contentDescription = "Back", tint = Ink, modifier = Modifier.size(26.dp))
             }
         }
         Text(
@@ -155,7 +155,7 @@ private fun Header(onBack: (() -> Unit)? = null) {
 
 @Composable
 private fun DeviceLine(d: DeviceSummary) {
-    val text = d.name + (d.setup?.let { " · Thiết lập ${Rules.fmtDate(it)}" } ?: "")
+    val text = d.name + (d.setup?.let { " · Set up ${Rules.fmtDate(it)}" } ?: "")
     Text(text, Modifier.padding(top = 8.dp), fontSize = 16.sp, color = Muted, textAlign = TextAlign.Center)
 }
 
@@ -177,11 +177,11 @@ private fun HomeScreen(d: DeviceSummary, v: VersionState, running: Boolean, onCh
                 color = Ink, textAlign = TextAlign.Center)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "Thiết lập máy " + (d.setup?.let { Rules.fmtDate(it) } ?: "không rõ"),
+                    d.setup?.let { "Setup date " + Rules.fmtDate(it) } ?: "Setup date unknown",
                     fontSize = 16.sp, color = Muted,
                 )
                 IconButton(onClick = { info = true }) {
-                    Icon(Ic.info, contentDescription = "Thiết lập máy là gì?", tint = Blue,
+                    Icon(Ic.info, contentDescription = "What is the setup date?", tint = Blue,
                         modifier = Modifier.size(20.dp))
                 }
             }
@@ -196,16 +196,16 @@ private fun HomeScreen(d: DeviceSummary, v: VersionState, running: Boolean, onCh
                 Modifier.padding(horizontal = 24.dp).padding(bottom = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                Text("Thiết lập máy là gì?", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = Ink)
+                Text("What is the setup date?", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = Ink)
                 Text(
-                    "Là ngày máy được cài đặt lần gần nhất: lần đầu bật máy mới, hoặc lần khôi phục cài đặt gốc gần nhất.",
+                    "The day this phone was last set up: its first boot as a new phone, or its most recent factory reset.",
                     fontSize = 17.sp, lineHeight = 25.sp, color = Color(0xFF374151),
                 )
                 Text(
-                    "Nếu ngày này sớm hơn nhiều so với ngày bạn mua, máy có thể đã qua tay người khác.",
+                    "If it is much earlier than the day you bought it, the phone has probably been used before.",
                     fontSize = 17.sp, lineHeight = 25.sp, color = Color(0xFF374151),
                 )
-                PrimaryButton("Đã hiểu") { info = false }
+                PrimaryButton("Got it") { info = false }
             }
         }
     }
@@ -228,7 +228,7 @@ private fun BigButton(running: Boolean, onClick: () -> Unit) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Ic.shieldCheck, contentDescription = null, tint = Color.White, modifier = Modifier.size(56.dp))
                     Spacer(Modifier.height(12.dp))
-                    Text("Kiểm tra", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
+                    Text("Check", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
                 }
             }
         }
@@ -255,7 +255,7 @@ private fun Card(content: @Composable () -> Unit) {
 
 @Composable
 private fun ResultScreen(d: DeviceSummary, v: VersionState, r: Report, onOpen: (Int) -> Unit, onAgain: () -> Unit) {
-    // Không cuộn: mọi thứ vừa một màn hình, khoảng trống co giãn đẩy nút xuống đáy.
+    // No scrolling: everything fits one screen; flexible gaps push the button to the bottom.
     val t = tone(r.status)
     Column(
         Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp),
@@ -285,22 +285,22 @@ private fun ResultScreen(d: DeviceSummary, v: VersionState, r: Report, onOpen: (
             }
         }
         Spacer(Modifier.weight(1f))
-        PrimaryButton("Kiểm tra lại", onAgain)
+        PrimaryButton("Check again", onAgain)
     }
 }
 
 data class VersionState(val current: String, val latest: Latest?, val checked: Boolean)
 
-/** Xanh: bản mới nhất. Đỏ: có bản mới (chạm để mở trang tải). Xám: đang hỏi hoặc không có mạng. */
+/** Green: up to date. Red: newer release (tap to open the download page). Grey: checking or offline. */
 @Composable
 private fun VersionPill(v: VersionState) {
     val uri = LocalUriHandler.current
     val newer = v.latest != null && Rules.isNewer(v.current, v.latest.version)
     val (dot, text) = when {
-        !v.checked -> Faint to "Phiên bản ${v.current} · đang kiểm tra"
-        v.latest == null -> Faint to "Phiên bản ${v.current} · chưa kiểm tra được"
-        newer -> Bad.solid to "Phiên bản ${v.current} · Có bản ${v.latest?.version}, chạm để tải"
-        else -> Good.solid to "Phiên bản ${v.current} · Bản mới nhất"
+        !v.checked -> Faint to "Version ${v.current} · checking"
+        v.latest == null -> Faint to "Version ${v.current} · couldn't check"
+        newer -> Bad.solid to "Version ${v.current} · ${v.latest?.version} available, tap to get it"
+        else -> Good.solid to "Version ${v.current} · Up to date"
     }
     val base = Modifier.clip(RoundedCornerShape(50)).background(Color.White)
     val mod = if (newer) base.clickable(role = Role.Button) { uri.openUri(v.latest!!.url) } else base
@@ -350,7 +350,7 @@ private fun MenuRow(s: Section, onClick: () -> Unit) {
 
 @Composable
 private fun DetailScreen(d: DeviceSummary, s: Section, onBack: () -> Unit) {
-    // Không cuộn: tiêu đề mục gọn trên một hàng, mỗi dòng tối đa 2 dòng giải thích.
+    // No scrolling: compact one-line section header, each row at most two lines of detail.
     val chip = sectionChip(s)
     Column(
         Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp),
@@ -379,7 +379,7 @@ private fun DetailScreen(d: DeviceSummary, s: Section, onBack: () -> Unit) {
         Spacer(Modifier.weight(1f))
         if (s.kind == Kind.MDM) {
             Text(
-                "Chưa kiểm được MDM gắn theo IMEI (zero-touch). Muốn chắc: reset máy rồi thiết lập lại có Wi‑Fi.",
+                "Can't detect IMEI-based MDM (zero-touch). To be sure: factory reset, then set up on Wi‑Fi.",
                 Modifier.padding(horizontal = 8.dp),
                 fontSize = 14.sp, lineHeight = 20.sp, color = Muted, textAlign = TextAlign.Center,
             )
@@ -409,7 +409,7 @@ private fun DetailRow(row: CheckRow) {
             ) {
                 Icon(
                     when (row.status) { Status.OK -> Ic.check; Status.BAD -> Ic.x; else -> Ic.alert },
-                    contentDescription = when (row.status) { Status.OK -> "Sạch"; Status.BAD -> "Có vấn đề"; else -> "Cần xem" },
+                    contentDescription = when (row.status) { Status.OK -> "Clear"; Status.BAD -> "Issue"; else -> "Review" },
                     tint = t.fg, modifier = Modifier.size(16.dp),
                 )
             }

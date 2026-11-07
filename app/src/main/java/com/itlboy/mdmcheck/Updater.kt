@@ -8,7 +8,7 @@ import java.net.URL
 
 data class Latest(val version: String, val url: String)
 
-/** Hỏi GitHub Releases bản mới nhất. Lỗi mạng → null, không bao giờ ném lỗi ra UI. */
+/** Asks GitHub Releases for the latest version. Network errors → null, never thrown to the UI. */
 object Updater {
     const val REPO = "itlboy/mdm-check"
     const val RELEASES_URL = "https://github.com/$REPO/releases/latest"

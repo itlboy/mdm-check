@@ -1,25 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Chỉ dùng để hỏi GitHub bản mới nhất; việc kiểm tra máy không gửi gì đi. -->
+    <!-- Only used to ask GitHub for the latest version; check results never leave the device. -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- Cần thấy mọi app để ước tính ngày thiết lập máy (app cài sẵn lúc bật máy lần đầu)
-         và tìm agent MDM. App phát hành ngoài CH Play nên không vướng chính sách Play. -->
+    <!-- Needs to see all apps to estimate the setup date (apps preloaded at first boot)
+         and to find MDM agents. Distributed outside Google Play, so Play policy does not apply. -->
     <uses-permission
         android:name="android.permission.QUERY_ALL_PACKAGES"
         xmlns:tools="http://schemas.android.com/tools"
         tools:ignore="QueryAllPackagesPermission" />
 
-    <!-- Android 11+ ẩn app khác với app thường; khai báo những gì cần nhìn thấy. -->
+    <!-- Android 11+ hides other apps from regular apps; declare what we need to see. -->
     <queries>
-        <!-- Mọi app đăng ký làm "ứng dụng quản trị thiết bị" -->
+        <!-- Every app registered as a device admin -->
         <intent>
             <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
         </intent>
-        <!-- Gói hệ thống dùng để ước tính ngày thiết lập máy -->
+        <!-- System packages used to estimate the setup date -->
         <package android:name="com.android.settings" />
         <package android:name="com.android.providers.settings" />
-        <!-- Agent MDM / khoá trả góp phổ biến -->
+        <!-- Common MDM agents / payment-lock apps -->
         <package android:name="com.microsoft.windowsintune.companyportal" />
         <package android:name="com.microsoft.intune" />
         <package android:name="com.airwatch.androidagent" />

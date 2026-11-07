@@ -8,7 +8,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Chạy trên giả lập/máy thật: Collector phải đọc được dữ liệu và không bao giờ ném lỗi. */
+/** Runs on an emulator or real device: Collector must read data and never throw. */
 @RunWith(AndroidJUnit4::class)
 class CollectorTest {
     private val ctx = InstrumentationRegistry.getInstrumentation().targetContext
@@ -24,14 +24,14 @@ class CollectorTest {
 
     @Test fun setupTime_isReadableAndInThePast() {
         val t = Collector.setupTime(ctx)
-        assertNotNull("Không đọc được ngày thiết lập máy", t)
+        assertNotNull("Could not read the setup date", t)
         assertTrue(t!! <= System.currentTimeMillis())
     }
 
     @Test fun emulator_isNotManaged() {
-        // Giả lập sạch trong CI: không được báo nhầm là có MDM.
+        // A clean CI emulator must never be reported as managed.
         val r = Collector.run(ctx)
         assertEquals(4, r.sections.size)
-        assertTrue("Báo nhầm có MDM: ${r.sub}", r.status != Status.BAD)
+        assertTrue("False MDM report: ${r.sub}", r.status != Status.BAD)
     }
 }

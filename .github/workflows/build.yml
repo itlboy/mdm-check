@@ -31,12 +31,12 @@ jobs:
           path: app/build/reports/tests/
 
   device:
-    name: Test trên giả lập Android
+    name: Emulator tests
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
-      - name: Bật KVM cho giả lập
+      - name: Enable KVM for the emulator
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
@@ -48,11 +48,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.11.1"
-      - name: Build trước (giả lập chỉ chạy test)
+      - name: Build first (the emulator only runs tests)
         run: gradle assembleDebug assembleDebugAndroidTest --no-daemon
-      # Giả lập đã khởi động sẵn được lưu thành snapshot: lần sau vào thẳng, khỏi boot nguội.
-      # Đổi api-level/profile thì đổi key để tạo snapshot mới.
-      - name: Cache giả lập
+      # A booted emulator is saved as a snapshot so later runs skip the cold boot.
+      # Change the key when api-level/profile changes to build a fresh snapshot.
+      - name: Emulator cache
         uses: actions/cache@v4
         id: avd-cache
         with:
@@ -60,7 +60,7 @@ jobs:
             ~/.android/avd/*
             ~/.android/adb*
           key: avd-34-default-pixel6-v1
-      - name: Tạo snapshot giả lập (chỉ khi chưa có cache)
+      - name: Create emulator snapshot (cache miss only)
         if: steps.avd-cache.outputs.cache-hit != 'true'
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -71,7 +71,7 @@ jobs:
           force-avd-creation: false
           disable-animations: false
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: echo "Đã tạo snapshot giả lập để cache."
+          script: echo "Emulator snapshot created for caching."
       - uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -89,7 +89,7 @@ jobs:
           path: app/build/reports/androidTests/
 
   release:
-    name: Phát hành APK
+    name: Release APK
     needs: [unit, device]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -100,17 +100,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # cần tag của bản trước để so thay đổi
-      - name: Tính số phiên bản (1.0, 1.1, …)
+          fetch-depth: 0 # needs the previous release tag to compare changes
+      - name: Compute version (1.0, 1.1, …)
         id: ver
         run: |
           latest=$(gh release view --json tagName -q .tagName 2>/dev/null || true)
           if [ -z "$latest" ]; then
             v="1.0"
           else
-            # Chỉ sửa CI/README thì không ra bản mới.
+            # CI/README-only changes do not publish a new version.
             if git diff --quiet "$latest" HEAD -- app build.gradle.kts settings.gradle.kts; then
-              echo "Không có thay đổi app kể từ $latest: bỏ qua phát hành."
+              echo "No app changes since $latest: skipping release."
               echo "skip=true" >> "$GITHUB_OUTPUT"
               exit 0
             fi
@@ -118,7 +118,7 @@ jobs:
             v="$major.$((minor + 1))"
           fi
           echo "APP_VERSION=$v" >> "$GITHUB_ENV"
-          echo "Phiên bản: $v (bản trước: ${latest:-chưa có})"
+          echo "Version: $v (previous: ${latest:-none})"
       - if: steps.ver.outputs.skip != 'true'
         uses: actions/setup-java@v4
         with:
@@ -128,21 +128,21 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.11.1"
-      - name: Build APK release ký bằng khoá cố định
+      - name: Build release APK signed with the fixed key
         if: steps.ver.outputs.skip != 'true'
         env:
           SIGNING_KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_B64 }}
           SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
         run: |
-          # Bản release (không debuggable) để Play Protect bớt soi; bắt buộc có khoá cố định.
-          if [ -z "$SIGNING_KEYSTORE_B64" ]; then echo "::error::Thiếu secret SIGNING_KEYSTORE_B64"; exit 1; fi
+          # Release build (not debuggable) draws fewer Play Protect warnings; the fixed key is mandatory.
+          if [ -z "$SIGNING_KEYSTORE_B64" ]; then echo "::error::Missing secret SIGNING_KEYSTORE_B64"; exit 1; fi
           echo "$SIGNING_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/mdm-check.p12"
           SIGNING_KEYSTORE="$RUNNER_TEMP/mdm-check.p12" gradle assembleRelease --no-daemon
           rm -f "$RUNNER_TEMP/mdm-check.p12"
-      - name: Tạo release
+      - name: Create release
         if: steps.ver.outputs.skip != 'true'
         run: |
           cp app/build/outputs/apk/release/app-release.apk "cozy-mdm-check-$APP_VERSION.apk"
           gh release create "v$APP_VERSION" "cozy-mdm-check-$APP_VERSION.apk" \
             --title "Cozy MDM Check $APP_VERSION" \
-            --notes "Bản thử build từ commit ${GITHUB_SHA::7}. Tải file .apk bên dưới về điện thoại Android rồi mở để cài."
+            --notes "Test build from commit ${GITHUB_SHA::7}. Download the .apk below on an Android phone and open it to install."

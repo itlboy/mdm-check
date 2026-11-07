@@ -9,9 +9,9 @@ import java.util.TimeZone
 
 class RulesTest {
     private val day = 86_400_000L
-    private val now = 1_793_000_000_000L // 11/2026
+    private val now = 1_793_000_000_000L // Nov 2026
 
-    /** Máy sạch: không admin, không chủ quản, một hồ sơ, bootloader khoá. */
+    /** Clean device: no admins, no owner, one profile, locked bootloader. */
     private val clean = Facts(
         deviceName = "OPPO Find X9 Ultra", manufacturer = "OPPO", model = "PHZ110", release = "16", sdk = 36,
         securityPatch = "2026-10-01", display = "PHZ110_16.0.0.100", buildTime = now - 60 * day,
@@ -23,138 +23,134 @@ class RulesTest {
 
     private fun mdmRow(f: Facts, name: String) = Rules.mdm(f).rows.first { it.name == name }
 
-    // ---- Kết luận chung ----
+    // ---- Overall verdict ----
 
     @Test fun cleanDevice_isClean() {
         val r = Rules.report(clean)
         assertEquals(Status.OK, r.status)
-        assertEquals("Máy sạch", r.headline)
-        assertEquals("5/5 mục sạch", r.sections[0].summary)
+        assertEquals("Device is clean", r.headline)
+        assertEquals("No MDM detected", r.sub)
+        assertEquals("5/5 clear", r.sections[0].summary)
         assertEquals(listOf(Kind.MDM, Kind.DEVICE, Kind.HISTORY, Kind.SECURITY), r.sections.map { it.kind })
     }
 
     @Test fun systemAdminOnly_isStillClean() {
         val f = clean.copy(systemAdmins = listOf("Google Play services"))
         assertEquals(Status.OK, Rules.report(f).status)
-        assertTrue(mdmRow(f, "Ứng dụng quản trị").detail.contains("Google Play services"))
+        assertEquals("System apps only: Google Play services", mdmRow(f, "Device admin apps").detail)
     }
 
     @Test fun userAdmin_isManaged() {
-        val f = clean.copy(userAdmins = listOf("Microsoft Intune"))
-        val r = Rules.report(f)
+        val r = Rules.report(clean.copy(userAdmins = listOf("Microsoft Intune")))
         assertEquals(Status.BAD, r.status)
-        assertEquals("Máy đang bị quản lý", r.headline)
-        assertEquals("Microsoft Intune đang bật", r.sub)
+        assertEquals("Device is managed", r.headline)
+        assertEquals("Microsoft Intune active", r.sub)
     }
 
     @Test fun deviceOwner_isManaged() {
         val f = clean.copy(deviceOwner = "Hexnode MDM")
-        assertEquals(Status.BAD, mdmRow(f, "Máy do tổ chức quản lý").status)
-        assertEquals(Status.BAD, Rules.report(f).status)
+        assertEquals(Status.BAD, mdmRow(f, "Organization-owned").status)
+        assertEquals("Managed by Hexnode MDM", Rules.report(f).sub)
     }
 
     @Test fun orgOwned_isManaged() {
-        val f = clean.copy(orgOwned = true)
-        assertEquals(Status.BAD, mdmRow(f, "Máy do tổ chức quản lý").status)
+        assertEquals(Status.BAD, mdmRow(clean.copy(orgOwned = true), "Organization-owned").status)
     }
 
     @Test fun profileOwner_isManaged() {
-        val f = clean.copy(profileOwner = "Intune")
-        assertEquals(Status.BAD, mdmRow(f, "Hồ sơ công việc").status)
+        assertEquals(Status.BAD, mdmRow(clean.copy(profileOwner = "Intune"), "Work profile").status)
     }
 
     @Test fun dualAppsProfile_isClean() {
-        // Ứng dụng kép / Không gian thứ hai (MIUI, ColorOS) tạo hồ sơ phụ không phải hồ sơ công việc.
+        // Dual Apps / Second Space (MIUI, ColorOS) create an extra profile that is not a work profile.
         val f = clean.copy(profiles = 2, workProfiles = 0)
         val r = Rules.report(f)
         assertEquals(Status.OK, r.status)
-        assertEquals("Máy sạch", r.headline)
-        assertTrue(mdmRow(f, "Hồ sơ công việc").detail.contains("Ứng dụng kép"))
+        assertEquals("None. Extra profile is Dual Apps / Second Space", mdmRow(f, "Work profile").detail)
     }
 
     @Test fun workProfile_isManaged() {
         val f = clean.copy(profiles = 2, workProfiles = 1)
-        assertEquals(Status.BAD, mdmRow(f, "Hồ sơ công việc").status)
+        assertEquals(Status.BAD, mdmRow(f, "Work profile").status)
         assertEquals(Status.BAD, Rules.report(f).status)
     }
 
     @Test fun unknownProfile_isOnlyWarning() {
-        val f = clean.copy(profiles = 2, workProfiles = -1)
-        val r = Rules.report(f)
+        val r = Rules.report(clean.copy(profiles = 2, workProfiles = -1))
         assertEquals(Status.WARN, r.status)
-        assertEquals("Cần xem thêm", r.headline)
-        assertEquals("1/5 mục cần xem", r.sections[0].summary)
+        assertEquals("Worth a closer look", r.headline)
+        assertEquals("1 item to review", r.sub)
+        assertEquals("1/5 to review", r.sections[0].summary)
+        assertEquals("2 extra profiles of unknown type",
+            mdmRow(clean.copy(profiles = 3, workProfiles = -1), "Work profile").detail)
     }
 
     @Test fun singleProfile_unknownBadge_isClean() {
-        // -1 chỉ có nghĩa khi có hồ sơ phụ.
-        assertEquals(Status.OK, mdmRow(clean.copy(workProfiles = -1), "Hồ sơ công việc").status)
+        // -1 only matters when an extra profile exists.
+        assertEquals(Status.OK, mdmRow(clean.copy(workProfiles = -1), "Work profile").status)
     }
 
     @Test fun knownApp_isManaged() {
-        val f = clean.copy(knownApps = listOf("PayJoy (khoá trả góp)"))
-        assertEquals(Status.BAD, mdmRow(f, "App MDM / khoá trả góp").status)
+        val f = clean.copy(knownApps = listOf("PayJoy (payment lock)"))
+        assertEquals(Status.BAD, mdmRow(f, "MDM / payment-lock apps").status)
     }
 
     @Test fun blockedFeatures_isManaged() {
-        val f = clean.copy(blocked = listOf("khôi phục gốc", "gỡ app"))
-        val row = mdmRow(f, "Tính năng bị chặn")
+        val row = mdmRow(clean.copy(blocked = listOf("factory reset", "uninstalling apps")), "Blocked features")
         assertEquals(Status.BAD, row.status)
-        assertEquals("Bị chặn: khôi phục gốc, gỡ app", row.detail)
+        assertEquals("Blocked: factory reset, uninstalling apps", row.detail)
     }
 
     @Test fun badBeatsWarn_andCountsAll() {
-        val f = clean.copy(deviceOwner = "X", blocked = listOf("gỡ app"), profiles = 3)
-        val r = Rules.report(f)
+        val r = Rules.report(clean.copy(deviceOwner = "X", blocked = listOf("uninstalling apps"), profiles = 3, workProfiles = -1))
         assertEquals(Status.BAD, r.status)
-        assertEquals("2/5 mục có vấn đề", r.sections[0].summary)
+        assertEquals("2/5 with issues", r.sections[0].summary)
     }
 
     @Test fun securityWarnings_doNotChangeMdmVerdict() {
-        val f = clean.copy(rooted = true, adb = true, devOptions = true, bootState = "orange")
-        val r = Rules.report(f)
+        val r = Rules.report(clean.copy(rooted = true, adb = true, devOptions = true, bootState = "orange"))
         assertEquals(Status.OK, r.status)
         assertEquals(Status.WARN, r.sections[3].status)
-        assertEquals("Bootloader mở · có root", r.sections[3].summary)
+        assertEquals("Bootloader unlocked · rooted", r.sections[3].summary)
     }
 
-    // ---- Bảo mật ----
+    // ---- Security ----
 
     @Test fun bootStates() {
-        assertEquals("Đã khoá", Rules.bootRow("green").value)
+        assertEquals("Locked", Rules.bootRow("green").value)
         assertEquals(Status.WARN, Rules.bootRow("orange").status)
         assertEquals(Status.WARN, Rules.bootRow("yellow").status)
         assertEquals(Status.INFO, Rules.bootRow("").status)
-        assertEquals("Bootloader khoá · không root", Rules.security(clean).summary)
-        assertEquals("Bootloader không rõ · không root", Rules.security(clean.copy(bootState = "")).summary)
+        assertEquals("Bootloader locked · not rooted", Rules.security(clean).summary)
+        assertEquals("Bootloader unknown · not rooted", Rules.security(clean.copy(bootState = "")).summary)
     }
 
-    // ---- Thông tin máy / lịch sử ----
+    // ---- Device info / history ----
 
     @Test fun deviceSection() {
         val s = Rules.device(clean)
         assertEquals("OPPO Find X9 Ultra · Android 16", s.summary)
-        assertEquals("01/10/2026", s.rows.first { it.name == "Bản vá bảo mật" }.value)
+        assertEquals("1 Oct 2026", s.rows.first { it.name == "Security patch" }.value)
     }
 
     @Test fun historySection() {
         val s = Rules.history(clean)
-        assertEquals("Thiết lập 2 ngày trước", s.summary)
-        assertEquals("3 giờ 0 phút", s.rows.first { it.name == "Chạy liên tục" }.value)
+        assertEquals("Set up 2 days ago", s.summary)
+        assertEquals("3h 0m", s.rows.first { it.name == "Uptime" }.value)
     }
 
     @Test fun historyWithoutSetupTime() {
         val s = Rules.history(clean.copy(setupTime = null))
-        assertEquals("Không rõ ngày thiết lập", s.summary)
-        assertEquals("Không rõ", s.rows.first().value)
+        assertEquals("Setup date unknown", s.summary)
+        assertEquals("Unknown", s.rows.first().value)
     }
 
     @Test fun deviceName_fallbacks() {
-        // Tên thương mại của hãng được ưu tiên, tự thêm hãng nếu thiếu.
+        // The manufacturer's marketing name wins; the brand is added when missing.
         assertEquals("Xiaomi Mi 10S", Rules.deviceName("Mi 10S", "M2102J2SC", "Xiaomi", "Xiaomi", "M2102J2SC"))
         assertEquals("Redmi Note 13", Rules.deviceName("Redmi Note 13", null, "Redmi", "Xiaomi", "23129RAA4G"))
         assertEquals("OPPO Find X9 Ultra", Rules.deviceName("OPPO Find X9 Ultra", null, "OPPO", "OPPO", "PHZ110"))
-        // Tên trong Cài đặt chỉ là mã model (MIUI) → bỏ, dùng hãng + mã.
+        // A Settings name that is just the model code (MIUI) is ignored in favour of brand + code.
         assertEquals("Xiaomi M2102J2SC", Rules.deviceName(null, "M2102J2SC", "Xiaomi", "Xiaomi", "M2102J2SC"))
         assertEquals("OPPO Find X9 Ultra", Rules.deviceName(null, " OPPO Find X9 Ultra ", "OPPO", "OPPO", "PHZ110"))
         assertEquals("OPPO PHZ110", Rules.deviceName("", null, "OPPO", "OPPO", "PHZ110"))
@@ -167,30 +163,31 @@ class RulesTest {
         assertEquals(1_600_000_000_000L, Rules.setupTime(listOf(0L, 1_700_000_000_000L, 1_600_000_000_000L)))
         assertNull(Rules.setupTime(listOf(0L, 1_000L)))
         assertNull(Rules.setupTime(emptyList()))
-        // Ngày giả 2009 của ảnh hệ thống bị loại, còn lại app cài sẵn lúc thiết lập máy.
+        // The fake 2009 stamp of system images is dropped; preloaded apps give the real date.
         assertEquals(1_620_000_000_000L, Rules.setupTime(listOf(1_230_768_000_000L, 1_620_000_000_000L, 1_700_000_000_000L)))
-        // Giờ tương lai (đồng hồ sai) bị loại.
+        // Future times (wrong clock) are dropped.
         assertEquals(1_600_000_000_000L, Rules.setupTime(listOf(1_600_000_000_000L, 1_900_000_000_000L), 1_800_000_000_000L))
         assertNull(Rules.setupTime(listOf(1_900_000_000_000L), 1_800_000_000_000L))
     }
 
-    // ---- Định dạng ----
+    // ---- Formatting ----
 
     @Test fun formatting() {
         val utc = TimeZone.getTimeZone("UTC")
-        assertEquals("01/01/2026", Rules.fmtDate(1_767_225_600_000L, utc))
-        assertEquals("hôm nay", Rules.agoText(now - 1_000L, now))
-        assertEquals("hôm nay", Rules.agoText(now + day, now))
-        assertEquals("214 ngày trước", Rules.agoText(now - 214 * day, now))
-        assertEquals("0 giờ 5 phút", Rules.uptimeText(5 * 60_000L))
-        assertEquals("2 ngày 3 giờ", Rules.uptimeText((51 * 3_600_000L)))
-        assertEquals("01/10/2026", Rules.formatPatch("2026-10-01"))
+        assertEquals("1 Jan 2026", Rules.fmtDate(1_767_225_600_000L, utc))
+        assertEquals("today", Rules.agoText(now - 1_000L, now))
+        assertEquals("today", Rules.agoText(now + day, now))
+        assertEquals("1 day ago", Rules.agoText(now - day, now))
+        assertEquals("214 days ago", Rules.agoText(now - 214 * day, now))
+        assertEquals("0h 5m", Rules.uptimeText(5 * 60_000L))
+        assertEquals("2d 3h", Rules.uptimeText(51 * 3_600_000L))
+        assertEquals("1 Oct 2026", Rules.formatPatch("2026-10-01"))
         assertEquals("", Rules.formatPatch(""))
-        assertEquals("lạ", Rules.formatPatch("lạ"))
-        assertEquals("a-b-c", Rules.formatPatch("a-b-c"))
+        assertEquals("odd", Rules.formatPatch("odd"))
+        assertEquals("2026-13-45", Rules.formatPatch("2026-13-45"))
     }
 
-    // ---- Phiên bản ----
+    // ---- Versions ----
 
     @Test fun isNewer() {
         assertTrue(Rules.isNewer("1.0", "1.1"))

@@ -8,7 +8,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.unit.dp
 
-/** Icon nét (giống mockup), vẽ từ đường dẫn SVG 24×24 — khỏi kéo cả thư viện icon. */
+/** Stroke icons (as in the mockup) drawn from 24×24 SVG paths, so no icon library is needed. */
 object Ic {
     private fun stroke(name: String, width: Float, vararg paths: String): ImageVector =
         ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f).apply {

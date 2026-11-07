@@ -4,7 +4,7 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
-// CI đặt APP_VERSION (1.0, 1.1, …, tính từ release mới nhất) và GITHUB_RUN_NUMBER (luôn tăng).
+// CI sets APP_VERSION (1.0, 1.1, … from the latest release) and GITHUB_RUN_NUMBER (always increasing).
 val buildNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
 val appVersion = System.getenv("APP_VERSION")?.takeIf { it.isNotBlank() } ?: "1.0"
 
@@ -21,8 +21,8 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    // CI giải mã khoá ký cố định từ secret, để bản mới cài đè được lên bản cũ.
-    // Build ở máy (không có biến này) thì dùng khoá debug mặc định.
+    // CI decodes the fixed signing key from a secret so new versions install over old ones.
+    // Local builds (no such variable) use the default debug key.
     val keystore = System.getenv("SIGNING_KEYSTORE")?.let { file(it) }?.takeIf { it.exists() }
     if (keystore != null) {
         signingConfigs {
@@ -58,7 +58,7 @@ android {
         buildConfig = true
     }
     testOptions {
-        // Rules dùng org.json qua Updater; trên JVM trả giá trị mặc định thay vì ném lỗi.
+        // Rules touches org.json via Updater; on the JVM return defaults instead of throwing.
         unitTests.isReturnDefaultValues = true
     }
 }

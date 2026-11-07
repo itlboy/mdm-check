@@ -10,9 +10,9 @@ import android.os.UserManager
 import android.provider.Settings
 import java.io.File
 
-/** Đọc dữ liệu thật từ máy thành [Facts]. Mọi lời gọi hệ thống đều bọc runCatching: máy lạ không được làm app crash. */
+/** Reads real device data into [Facts]. Every system call is wrapped in runCatching: odd devices must never crash the app. */
 object Collector {
-    /** Agent MDM / khoá trả góp hay gặp. Phải khai báo cùng tên trong <queries> của manifest. */
+    /** Common MDM agents / payment-lock apps. Each must also be listed in the manifest <queries>. */
     val KNOWN = mapOf(
         "com.microsoft.windowsintune.companyportal" to "Microsoft Intune",
         "com.microsoft.intune" to "Microsoft Intune",
@@ -23,7 +23,7 @@ object Collector {
         "com.hexnode.hexnodemdm" to "Hexnode MDM",
         "com.promobitech.mobilock.pro" to "Scalefusion",
         "com.sophos.mobilecontrol.client.android" to "Sophos Mobile",
-        "com.payjoy.access" to "PayJoy (khoá trả góp)",
+        "com.payjoy.access" to "PayJoy (payment lock)",
     )
 
     private val SU_PATHS = listOf(
@@ -31,15 +31,15 @@ object Collector {
         "/data/adb/magisk", "/data/local/bin/su", "/data/local/xbin/su",
     )
 
-    /** Chỉ chặn những gì quản lý MDM hay dùng; giá trị là chữ hiện cho người dùng. */
+    /** Restrictions MDM commonly applies; the value is the text shown to the user. */
     private val RESTRICTIONS = listOf(
-        UserManager.DISALLOW_FACTORY_RESET to "khôi phục gốc",
-        UserManager.DISALLOW_UNINSTALL_APPS to "gỡ app",
-        UserManager.DISALLOW_DEBUGGING_FEATURES to "gỡ lỗi USB",
-        UserManager.DISALLOW_USB_FILE_TRANSFER to "chép file qua USB",
+        UserManager.DISALLOW_FACTORY_RESET to "factory reset",
+        UserManager.DISALLOW_UNINSTALL_APPS to "uninstalling apps",
+        UserManager.DISALLOW_DEBUGGING_FEATURES to "USB debugging",
+        UserManager.DISALLOW_USB_FILE_TRANSFER to "USB file transfer",
     )
 
-    /** Tên thương mại hãng ghi trong hệ thống (Xiaomi, OPPO/realme/OnePlus, Huawei…). */
+    /** Marketing name the manufacturer stores in system properties (Xiaomi, OPPO/realme/OnePlus, Huawei…). */
     private val MARKET_PROPS = listOf(
         "ro.product.marketname", "ro.product.vendor.marketname", "ro.product.odm.marketname",
         "ro.vendor.oplus.market.name", "ro.oppo.market.name", "ro.config.marketing_name",
@@ -52,9 +52,9 @@ object Collector {
     }
 
     /**
-     * Ngày thiết lập máy ≈ lần đầu bật máy hoặc lần khôi phục cài đặt gốc gần nhất.
-     * Hai nguồn: gói hệ thống (một số máy ghi đúng giờ khởi động đầu, số khác ghi 2009 → bị loại)
-     * và app cài sẵn không thuộc hệ thống (hãng cài lúc thiết lập máy).
+     * Setup date ≈ first boot or most recent factory reset.
+     * Two sources: system packages (some devices stamp the first boot, others 2009, which is dropped)
+     * and preloaded non-system apps (installed by the OEM during setup).
      */
     fun setupTime(ctx: Context): Long? {
         val pm = ctx.packageManager
@@ -67,8 +67,8 @@ object Collector {
     }
 
     /**
-     * Đếm hồ sơ phụ là hồ sơ CÔNG VIỆC: Android gắn nhãn "… công việc" cho app trong hồ sơ đó.
-     * Nhân bản app / Không gian thứ hai không có nhãn này. Trả -1 nếu không phân định được.
+     * Counts extra profiles that are WORK profiles: Android badges app labels in them as "Work …".
+     * Dual Apps / Second Space carry no such badge. Returns -1 when it cannot tell.
      */
     private fun workProfiles(ctx: Context, um: UserManager): Int {
         val me = android.os.Process.myUserHandle()

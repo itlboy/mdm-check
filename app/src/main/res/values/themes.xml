@@ -4,7 +4,7 @@
     <color name="ic_bg">#2563EB</color>
     <style name="AppTheme" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/bg</item>
-        <!-- MIUI/ColorOS chế độ tối tự đảo màu chữ app sáng thành trắng trên nền sáng: cấm. -->
+        <!-- MIUI/ColorOS dark mode force-inverts dark text to white on our light background: opt out. -->
         <item name="android:forceDarkAllowed" tools:targetApi="q">false</item>
     </style>
 </resources>

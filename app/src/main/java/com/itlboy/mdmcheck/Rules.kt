@@ -9,13 +9,13 @@ import java.util.concurrent.TimeUnit
 enum class Status { OK, BAD, WARN, INFO }
 enum class Kind { MDM, DEVICE, HISTORY, SECURITY }
 
-/** Một dòng trong trang con. `value` có thì hiện chữ bên phải, không thì hiện dấu ✓/✗. */
+/** One row on a detail screen. With `value`, the text shows on the right; otherwise a ✓/✗ badge. */
 data class CheckRow(val name: String, val detail: String, val status: Status = Status.INFO, val value: String? = null)
 data class Section(val kind: Kind, val title: String, val summary: String, val status: Status, val rows: List<CheckRow>)
 data class Report(val status: Status, val headline: String, val sub: String, val sections: List<Section>)
 data class DeviceSummary(val name: String, val android: String, val setup: Long?)
 
-/** Dữ liệu thô đọc từ máy. Tách riêng để [Rules] test được mà không cần Android. */
+/** Raw data read from the device. Kept separate so [Rules] can be tested without Android. */
 data class Facts(
     val deviceName: String,
     val manufacturer: String,
@@ -28,15 +28,15 @@ data class Facts(
     val setupTime: Long?,
     val uptimeMs: Long,
     val now: Long,
-    /** Tên app quản trị KHÔNG phải app hệ thống (agent MDM thường thuộc loại này). */
+    /** Active device admins that are NOT system apps (MDM agents usually are this kind). */
     val userAdmins: List<String>,
-    /** Tên app quản trị là app hệ thống (Tìm thiết bị của Google/OPPO…): bình thường. */
+    /** Active device admins that are system apps (Google/OEM Find My Device…): normal. */
     val systemAdmins: List<String>,
     val deviceOwner: String?,
     val orgOwned: Boolean,
     val profileOwner: String?,
     val profiles: Int,
-    /** Số hồ sơ phụ là hồ sơ công việc; -1 = không phân định được. */
+    /** Number of extra profiles that are work profiles; -1 = could not tell. */
     val workProfiles: Int,
     val knownApps: List<String>,
     val blocked: List<String>,
@@ -46,34 +46,42 @@ data class Facts(
     val adb: Boolean,
 )
 
-/** Toàn bộ logic kết luận. Hàm thuần: cùng [Facts] → cùng [Report]. */
+/** All verdict logic. Pure functions: same [Facts] → same [Report]. */
 object Rules {
     private const val YEAR_2015 = 1_420_070_400_000L
 
+    /** "5 Nov 2026": unambiguous whatever the reader's date habits. */
     fun fmtDate(t: Long, tz: TimeZone = TimeZone.getDefault()): String =
-        SimpleDateFormat("dd/MM/yyyy", Locale.ROOT).apply { timeZone = tz }.format(Date(t))
+        SimpleDateFormat("d MMM yyyy", Locale.US).apply { timeZone = tz }.format(Date(t))
 
     fun agoText(t: Long, now: Long): String {
         val d = TimeUnit.MILLISECONDS.toDays(now - t)
-        return if (d <= 0) "hôm nay" else "$d ngày trước"
+        return when {
+            d <= 0 -> "today"
+            d == 1L -> "1 day ago"
+            else -> "$d days ago"
+        }
     }
 
     fun uptimeText(ms: Long): String {
         val hours = TimeUnit.MILLISECONDS.toHours(ms)
-        return if (hours >= 24) "${hours / 24} ngày ${hours % 24} giờ"
-        else "$hours giờ ${TimeUnit.MILLISECONDS.toMinutes(ms) % 60} phút"
+        return if (hours >= 24) "${hours / 24}d ${hours % 24}h"
+        else "${hours}h ${TimeUnit.MILLISECONDS.toMinutes(ms) % 60}m"
     }
 
-    /** "2026-10-01" → "01/10/2026"; chuỗi lạ giữ nguyên. */
+    /** "2026-10-01" → "1 Oct 2026"; anything unexpected is returned as is. */
     fun formatPatch(p: String): String {
-        val parts = p.split("-")
-        return if (parts.size == 3 && parts.all { it.isNotEmpty() && it.all(Char::isDigit) })
-            "${parts[2]}/${parts[1]}/${parts[0]}" else p
+        if (!Regex("""\d{4}-\d{2}-\d{2}""").matches(p)) return p
+        val utc = TimeZone.getTimeZone("UTC")
+        val parsed = runCatching {
+            SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = utc; isLenient = false }.parse(p)
+        }.getOrNull() ?: return p
+        return fmtDate(parsed.time, utc)
     }
 
     /**
-     * Ưu tiên: tên thương mại của hãng ("Mi 10S" → "Xiaomi Mi 10S") → tên máy trong Cài đặt
-     * (nếu không chỉ là mã model) → "Hãng + mã model".
+     * Priority: the manufacturer's marketing name ("Mi 10S" → "Xiaomi Mi 10S") → the device name
+     * from Settings (unless it is just the model code) → "Brand + model code".
      */
     fun deviceName(market: String?, setting: String?, brand: String, manufacturer: String, model: String): String {
         fun cap(s: String) = s.replaceFirstChar { it.titlecase(Locale.ROOT) }
@@ -89,18 +97,18 @@ object Rules {
         return withBrand(model)
     }
 
-    /** Lấy thời điểm sớm nhất hợp lệ; bỏ giá trị trước 2015 (ngày giả 2009 của ảnh hệ thống) và sau [now]. */
+    /** Earliest valid time; drops anything before 2015 (system images stamp 2009) or after [now]. */
     fun setupTime(times: List<Long>, now: Long = Long.MAX_VALUE): Long? =
         times.filter { it > YEAR_2015 && it <= now }.minOrNull()
 
-    /** "v0.1.12" → Latest("0.1.12", url). Tag rỗng hoặc không có số → null. */
+    /** "v1.2" → Latest("1.2", url). Empty or non-numeric tag → null. */
     fun parseRelease(tag: String?, url: String?): Latest? {
         val v = tag?.trim()?.removePrefix("v")?.removePrefix("V") ?: return null
         if (v.isEmpty() || !v.first().isDigit()) return null
         return Latest(v, if (url.isNullOrBlank()) Updater.RELEASES_URL else url)
     }
 
-    /** true nếu [latest] mới hơn [current]; so từng số, thiếu thì coi là 0 ("0.1" == "0.1.0"). */
+    /** True if [latest] is newer than [current]; compares number by number, missing parts are 0 ("1.0" == "1.0.0"). */
     fun isNewer(current: String, latest: String): Boolean {
         fun parts(v: String) = v.removePrefix("v").split(".", "-").map { p -> p.takeWhile(Char::isDigit).toIntOrNull() ?: 0 }
         val a = parts(current)
@@ -113,107 +121,108 @@ object Rules {
         return false
     }
 
+    private fun plural(n: Int, one: String, many: String) = if (n == 1) "1 $one" else "$n $many"
+
     fun report(f: Facts): Report {
         val mdm = mdm(f)
         val sections = listOf(mdm, device(f), history(f), security(f))
         val bad = mdm.rows.filter { it.status == Status.BAD }
         val warn = mdm.rows.count { it.status == Status.WARN }
         return when {
-            bad.isNotEmpty() -> Report(Status.BAD, "Máy đang bị quản lý", bad.first().detail, sections)
-            warn > 0 -> Report(Status.WARN, "Cần xem thêm", "$warn mục nên kiểm tra lại", sections)
-            else -> Report(Status.OK, "Máy sạch", "Không phát hiện MDM", sections)
+            bad.isNotEmpty() -> Report(Status.BAD, "Device is managed", bad.first().detail, sections)
+            warn > 0 -> Report(Status.WARN, "Worth a closer look", plural(warn, "item", "items") + " to review", sections)
+            else -> Report(Status.OK, "Device is clean", "No MDM detected", sections)
         }
     }
 
     fun mdm(f: Facts): Section {
         val admin = when {
             f.userAdmins.isNotEmpty() ->
-                CheckRow("Ứng dụng quản trị", f.userAdmins.joinToString() + " đang bật", Status.BAD)
+                CheckRow("Device admin apps", f.userAdmins.joinToString() + " active", Status.BAD)
             f.systemAdmins.isNotEmpty() ->
-                CheckRow("Ứng dụng quản trị", "Chỉ có app hệ thống: " + f.systemAdmins.joinToString(), Status.OK)
-            else -> CheckRow("Ứng dụng quản trị", "Không có app nào đang bật", Status.OK)
+                CheckRow("Device admin apps", "System apps only: " + f.systemAdmins.joinToString(), Status.OK)
+            else -> CheckRow("Device admin apps", "None active", Status.OK)
         }
         val owner = when {
-            f.deviceOwner != null -> CheckRow("Máy do tổ chức quản lý", "Quản lý bởi ${f.deviceOwner}", Status.BAD)
-            f.orgOwned -> CheckRow("Máy do tổ chức quản lý", "Máy thuộc sở hữu của tổ chức", Status.BAD)
-            else -> CheckRow("Máy do tổ chức quản lý", "Không có tổ chức nào", Status.OK)
+            f.deviceOwner != null -> CheckRow("Organization-owned", "Managed by ${f.deviceOwner}", Status.BAD)
+            f.orgOwned -> CheckRow("Organization-owned", "Owned by an organization", Status.BAD)
+            else -> CheckRow("Organization-owned", "No organization", Status.OK)
         }
-        // Hồ sơ phụ thường là Ứng dụng kép / Không gian thứ hai: chỉ báo đỏ khi chắc là hồ sơ công việc.
+        // Extra profiles are usually Dual Apps / Second Space: only red when it is surely a work profile.
         val extra = f.profiles - 1
         val profile = when {
-            f.profileOwner != null -> CheckRow("Hồ sơ công việc", "Quản lý bởi ${f.profileOwner}", Status.BAD)
-            f.workProfiles > 0 -> CheckRow("Hồ sơ công việc", "Máy đang có hồ sơ công việc", Status.BAD)
-            extra > 0 && f.workProfiles < 0 -> CheckRow("Hồ sơ công việc",
-                "Có $extra hồ sơ phụ, không xác định được loại", Status.WARN)
-            extra > 0 -> CheckRow("Hồ sơ công việc",
-                "Không có. Hồ sơ phụ là Ứng dụng kép / Không gian thứ hai", Status.OK)
-            else -> CheckRow("Hồ sơ công việc", "Chỉ có hồ sơ cá nhân", Status.OK)
+            f.profileOwner != null -> CheckRow("Work profile", "Managed by ${f.profileOwner}", Status.BAD)
+            f.workProfiles > 0 -> CheckRow("Work profile", "A work profile is present", Status.BAD)
+            extra > 0 && f.workProfiles < 0 -> CheckRow("Work profile",
+                plural(extra, "extra profile", "extra profiles") + " of unknown type", Status.WARN)
+            extra > 0 -> CheckRow("Work profile", "None. Extra profile is Dual Apps / Second Space", Status.OK)
+            else -> CheckRow("Work profile", "Personal profile only", Status.OK)
         }
         val known = if (f.knownApps.isNotEmpty())
-            CheckRow("App MDM / khoá trả góp", "Đã cài: " + f.knownApps.joinToString(), Status.BAD)
-        else CheckRow("App MDM / khoá trả góp", "Không thấy app nào", Status.OK)
+            CheckRow("MDM / payment-lock apps", "Installed: " + f.knownApps.joinToString(), Status.BAD)
+        else CheckRow("MDM / payment-lock apps", "None found", Status.OK)
         val blocked = if (f.blocked.isNotEmpty())
-            CheckRow("Tính năng bị chặn", "Bị chặn: " + f.blocked.joinToString(), Status.BAD)
-        else CheckRow("Tính năng bị chặn", "Reset, gỡ app, USB đều được", Status.OK)
+            CheckRow("Blocked features", "Blocked: " + f.blocked.joinToString(), Status.BAD)
+        else CheckRow("Blocked features", "Reset, uninstall and USB all allowed", Status.OK)
 
         val rows = listOf(admin, owner, profile, known, blocked)
         val bad = rows.count { it.status == Status.BAD }
         val warn = rows.count { it.status == Status.WARN }
         val (status, summary) = when {
-            bad > 0 -> Status.BAD to "$bad/${rows.size} mục có vấn đề"
-            warn > 0 -> Status.WARN to "$warn/${rows.size} mục cần xem"
-            else -> Status.OK to "${rows.size}/${rows.size} mục sạch"
+            bad > 0 -> Status.BAD to "$bad/${rows.size} with issues"
+            warn > 0 -> Status.WARN to "$warn/${rows.size} to review"
+            else -> Status.OK to "${rows.size}/${rows.size} clear"
         }
-        return Section(Kind.MDM, "Dấu hiệu quản lý", summary, status, rows)
+        return Section(Kind.MDM, "Management signs", summary, status, rows)
     }
 
     fun device(f: Facts): Section {
         val rows = listOf(
-            CheckRow("Tên máy", f.manufacturer, value = f.deviceName),
-            CheckRow("Mã model", "Mã nhà sản xuất đặt", value = f.model),
-            CheckRow("Phiên bản", "API ${f.sdk}", value = "Android ${f.release}"),
-            CheckRow("Bản vá bảo mật", "Càng mới càng an toàn", value = formatPatch(f.securityPatch)),
-            CheckRow("Bản phần mềm", f.display),
+            CheckRow("Name", f.manufacturer, value = f.deviceName),
+            CheckRow("Model", "Manufacturer code", value = f.model),
+            CheckRow("Version", "API ${f.sdk}", value = "Android ${f.release}"),
+            CheckRow("Security patch", "Newer is safer", value = formatPatch(f.securityPatch)),
+            CheckRow("Build", f.display),
         )
-        return Section(Kind.DEVICE, "Thông tin máy", "${f.deviceName} · Android ${f.release}", Status.INFO, rows)
+        return Section(Kind.DEVICE, "Device info", "${f.deviceName} · Android ${f.release}", Status.INFO, rows)
     }
 
     fun history(f: Facts): Section {
         val setup = f.setupTime
         val rows = listOf(
-            if (setup != null) CheckRow("Thiết lập máy",
-                "Lần đầu bật máy hoặc lần reset gần nhất · ${agoText(setup, f.now)}", value = fmtDate(setup))
-            else CheckRow("Thiết lập máy", "Không đọc được trên máy này", value = "Không rõ"),
-            CheckRow("Ngày build phần mềm", "Bản hệ điều hành đang cài", value = fmtDate(f.buildTime)),
-            CheckRow("Chạy liên tục", "Từ lần khởi động gần nhất", value = uptimeText(f.uptimeMs)),
+            if (setup != null) CheckRow("Setup date",
+                "First boot or last factory reset · ${agoText(setup, f.now)}", value = fmtDate(setup))
+            else CheckRow("Setup date", "Not readable on this device", value = "Unknown"),
+            CheckRow("OS build date", "Installed system version", value = fmtDate(f.buildTime)),
+            CheckRow("Uptime", "Since last restart", value = uptimeText(f.uptimeMs)),
         )
-        val summary = setup?.let { "Thiết lập ${agoText(it, f.now)}" } ?: "Không rõ ngày thiết lập"
-        return Section(Kind.HISTORY, "Lịch sử máy", summary, Status.INFO, rows)
+        val summary = setup?.let { "Set up ${agoText(it, f.now)}" } ?: "Setup date unknown"
+        return Section(Kind.HISTORY, "Device history", summary, Status.INFO, rows)
     }
 
     fun bootRow(state: String): CheckRow = when (state) {
-        "green" -> CheckRow("Bootloader", "Phần mềm gốc của hãng", Status.OK, "Đã khoá")
-        "orange" -> CheckRow("Bootloader", "Phần mềm có thể đã bị sửa", Status.WARN, "Đã mở khoá")
-        "yellow" -> CheckRow("Bootloader", "Đang dùng khoá ký riêng", Status.WARN, "Khoá riêng")
-        else -> CheckRow("Bootloader", "Máy không cho đọc trạng thái", Status.INFO, "Không rõ")
+        "green" -> CheckRow("Bootloader", "Stock manufacturer software", Status.OK, "Locked")
+        "orange" -> CheckRow("Bootloader", "Software may be modified", Status.WARN, "Unlocked")
+        "yellow" -> CheckRow("Bootloader", "Signed with a custom key", Status.WARN, "Custom key")
+        else -> CheckRow("Bootloader", "Device doesn't expose this", Status.INFO, "Unknown")
     }
 
     fun security(f: Facts): Section {
         val boot = bootRow(f.bootState)
-        val root = if (f.rooted) CheckRow("Root", "Có dấu vết root trên máy", Status.WARN, "Có dấu hiệu")
-        else CheckRow("Root", "Không tìm thấy dấu vết root", Status.OK, "Không")
-        val dev = if (f.devOptions) CheckRow("Tuỳ chọn nhà phát triển", "Nên tắt nếu không dùng", Status.WARN, "Đang bật")
-        else CheckRow("Tuỳ chọn nhà phát triển", "Đang tắt", Status.OK, "Tắt")
-        val adb = if (f.adb) CheckRow("Gỡ lỗi USB", "Nên tắt nếu không dùng", Status.WARN, "Đang bật")
-        else CheckRow("Gỡ lỗi USB", "Đang tắt", Status.OK, "Tắt")
+        val root = if (f.rooted) CheckRow("Root", "Root traces found", Status.WARN, "Likely")
+        else CheckRow("Root", "No root traces", Status.OK, "No")
+        val dev = if (f.devOptions) CheckRow("Developer options", "Turn off if unused", Status.WARN, "On")
+        else CheckRow("Developer options", "Turned off", Status.OK, "Off")
+        val adb = if (f.adb) CheckRow("USB debugging", "Turn off if unused", Status.WARN, "On")
+        else CheckRow("USB debugging", "Turned off", Status.OK, "Off")
         val rows = listOf(boot, root, dev, adb)
         val bootShort = when (boot.status) {
-            Status.OK -> "Bootloader khoá"
-            Status.WARN -> "Bootloader mở"
-            else -> "Bootloader không rõ"
+            Status.OK -> "Bootloader locked"
+            Status.WARN -> "Bootloader unlocked"
+            else -> "Bootloader unknown"
         }
-        val summary = "$bootShort · " + if (f.rooted) "có root" else "không root"
+        val summary = "$bootShort · " + if (f.rooted) "rooted" else "not rooted"
         val status = if (rows.any { it.status == Status.WARN }) Status.WARN else Status.OK
-        return Section(Kind.SECURITY, "Bảo mật khác", summary, status, rows)
+        return Section(Kind.SECURITY, "Other security", summary, status, rows)
     }
 }
