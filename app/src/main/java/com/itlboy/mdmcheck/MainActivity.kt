@@ -61,6 +61,9 @@ import kotlinx.coroutines.withContext
 /** UI strings follow the phone language (see [Texts]). */
 private val tx: Texts get() = Texts.current()
 
+private val HeaderHeight = 48.dp
+private val ScreenPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp, vertical = 16.dp)
+
 private val Bg = Color(0xFFF4F6F9)
 private val Ink = Color(0xFF111827)
 private val Muted = Color(0xFF4B5563)
@@ -143,7 +146,8 @@ fun App() {
 
 @Composable
 private fun Header(onBack: (() -> Unit)? = null) {
-    Box(Modifier.fillMaxWidth()) {
+    // Fixed height (same as the back button) and the same screen padding everywhere, so the title never moves.
+    Box(Modifier.fillMaxWidth().height(HeaderHeight)) {
         if (onBack != null) {
             IconButton(onClick = onBack, modifier = Modifier.align(Alignment.CenterStart)) {
                 Icon(Ic.back, contentDescription = tx.back, tint = Ink, modifier = Modifier.size(26.dp))
@@ -169,7 +173,7 @@ private fun DeviceLine(d: DeviceSummary) {
 private fun HomeScreen(d: DeviceSummary, v: VersionState, running: Boolean, onCheck: () -> Unit) {
     var info by remember { mutableStateOf(false) }
     Column(
-        Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 24.dp),
+        Modifier.fillMaxSize().padding(ScreenPadding),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Header()
@@ -263,7 +267,7 @@ private fun ResultScreen(d: DeviceSummary, v: VersionState, r: Report, onOpen: (
     // No scrolling: everything fits one screen; flexible gaps push the button to the bottom.
     val t = tone(r.status)
     Column(
-        Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp),
+        Modifier.fillMaxSize().padding(ScreenPadding),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Header()
@@ -364,7 +368,7 @@ private fun DetailScreen(d: DeviceSummary, s: Section, onBack: () -> Unit) {
     // No scrolling: compact one-line section header, each row at most two lines of detail.
     val chip = sectionChip(s)
     Column(
-        Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp),
+        Modifier.fillMaxSize().padding(ScreenPadding),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Header(onBack)
