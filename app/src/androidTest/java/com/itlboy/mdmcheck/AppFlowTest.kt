@@ -23,7 +23,7 @@ class AppFlowTest {
     @Test fun homeShowsTitleAndVersion() {
         rule.onNodeWithText("Cozy MDM Check").assertIsDisplayed()
         rule.onNodeWithText("Check").assertIsDisplayed()
-        rule.onNodeWithText("Version ${BuildConfig.VERSION_NAME}", substring = true).assertIsDisplayed()
+        rule.onNodeWithText("v${BuildConfig.VERSION_NAME} · ", substring = true).assertIsDisplayed()
     }
 
     @Test fun infoSheetOpensAndCloses() {
